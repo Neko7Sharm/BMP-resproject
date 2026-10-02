@@ -156,7 +156,7 @@ export default function RecipesPage() {
       ...recipeRows,
       {
         materialId: materials[0].id,
-        quantityRequired: defaultUnit === 'g' || defaultUnit === 'ml' ? 50 : 0.05,
+        quantityRequired: 0.05,
         unit: defaultUnit,
       },
     ]);
