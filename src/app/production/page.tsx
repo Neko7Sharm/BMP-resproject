@@ -35,6 +35,7 @@ interface BOMItem {
   materialCode: string;
   materialName: string;
   unit: string;
+  recipeUnit?: string;
   quantityRequiredPerUnit: number;
   totalRequired: number;
   currentStock: number;
