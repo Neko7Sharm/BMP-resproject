@@ -5,6 +5,7 @@ export interface BOMAllocationItem {
   materialCode: string;
   materialName: string;
   unit: string;
+  recipeUnit?: string;
   quantityRequiredPerUnit: number;
   totalRequired: number;
   currentStock: number;
@@ -30,6 +31,44 @@ export interface ProductionCalculationResult {
   targetQuantity: number;
   canProduce: boolean;
   materials: BOMAllocationItem[];
+}
+
+/**
+ * แปลงหน่วยระหว่างหน่วยในสูตร (Recipe Unit) และหน่วยหลักของวัตถุดิบในคลัง (Base Unit)
+ * รองรับ:
+ * - ของแข็ง: kg (กิโลกรัม) <-> g (กรัม) [1 kg = 1000 g]
+ * - ของเหลว: L (ลิตร) <-> ml (มิลลิลิตร) [1 L = 1000 ml]
+ */
+export function convertToMaterialBaseUnit(
+  quantity: number,
+  fromUnit: string = 'kg',
+  baseUnit: string = 'kg'
+): number {
+  if (!quantity) return 0;
+  const from = (fromUnit || '').toLowerCase().trim();
+  const to = (baseUnit || '').toLowerCase().trim();
+
+  if (from === to) return quantity;
+
+  // Solid conversions: kg <-> g
+  const isFromKg = from === 'kg' || from === 'กิโลกรัม' || from === 'กก.' || from === 'กก';
+  const isFromG = from === 'g' || from === 'กรัม';
+  const isBaseKg = to === 'kg' || to === 'กิโลกรัม' || to === 'กก.' || to === 'กก';
+  const isBaseG = to === 'g' || to === 'กรัม';
+
+  if (isFromG && isBaseKg) return quantity / 1000;
+  if (isFromKg && isBaseG) return quantity * 1000;
+
+  // Liquid conversions: L <-> ml
+  const isFromL = from === 'l' || from === 'ลิตร';
+  const isFromMl = from === 'ml' || from === 'มิลลิลิตร' || from === 'มล.' || from === 'มล';
+  const isBaseL = to === 'l' || to === 'ลิตร';
+  const isBaseMl = to === 'ml' || to === 'มิลลิลิตร' || to === 'มล.' || to === 'มล';
+
+  if (isFromMl && isBaseL) return quantity / 1000;
+  if (isFromL && isBaseMl) return quantity * 1000;
+
+  return quantity;
 }
 
 /**
@@ -70,10 +109,19 @@ export async function calculateProductionBOM(
   const materials: BOMAllocationItem[] = [];
 
   for (const item of product.recipeItems) {
-    const totalRequired = item.quantityRequired * targetQuantity;
-    const currentStock = item.material.lots.reduce(
-      (sum, lot) => sum + lot.quantityRemaining,
-      0
+    const baseUnit = item.material.baseUnit || 'kg';
+    const recipeUnit = item.unit || baseUnit;
+
+    // แปลงอัตราส่วนต่อ 1 หน่วยสินค้าให้อยู่ใน Base Unit ของคลัง
+    const quantityRequiredPerUnitInBase = convertToMaterialBaseUnit(
+      item.quantityRequired,
+      recipeUnit,
+      baseUnit
+    );
+
+    const totalRequired = Number((quantityRequiredPerUnitInBase * targetQuantity).toFixed(4));
+    const currentStock = Number(
+      item.material.lots.reduce((sum, lot) => sum + lot.quantityRemaining, 0).toFixed(4)
     );
 
     const isShortage = currentStock < totalRequired;
@@ -105,10 +153,11 @@ export async function calculateProductionBOM(
       materialId: item.material.id,
       materialCode: item.material.code,
       materialName: item.material.name,
-      unit: item.unit || item.material.baseUnit,
+      unit: baseUnit,
+      recipeUnit,
       quantityRequiredPerUnit: item.quantityRequired,
-      totalRequired: Number(totalRequired.toFixed(3)),
-      currentStock: Number(currentStock.toFixed(3)),
+      totalRequired,
+      currentStock,
       isShortage,
       shortageQuantity: isShortage ? Number((totalRequired - currentStock).toFixed(3)) : 0,
       suggestedLots,

@@ -10,7 +10,12 @@ import {
   Calculator, 
   AlertCircle,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Edit2,
+  X,
+  Info,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
 interface RecipeItem {
@@ -35,21 +40,55 @@ interface Product {
   recipeItems: RecipeItem[];
 }
 
+interface Material {
+  id: string;
+  code: string;
+  name: string;
+  baseUnit: string;
+}
+
+interface RecipeRowState {
+  materialId: string;
+  quantityRequired: number;
+  unit: string;
+}
+
+function isLiquidUnit(unit: string) {
+  const u = (unit || '').toLowerCase();
+  return u === 'l' || u === 'ml' || u.includes('ลิตร') || u.includes('มล');
+}
+
+function getAvailableUnitsForMaterial(baseUnit: string) {
+  if (isLiquidUnit(baseUnit)) {
+    return [
+      { value: 'L', label: 'L (ลิตร)' },
+      { value: 'ml', label: 'ml (มิลลิลิตร)' },
+    ];
+  }
+  return [
+    { value: 'kg', label: 'kg (กิโลกรัม)' },
+    { value: 'g', label: 'g (กรัม)' },
+  ];
+}
+
 export default function RecipesPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // New Product Modal State
+  // Create / Edit Modal State
   const [showModal, setShowModal] = useState(false);
-  const [newCode, setNewCode] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newUnit, setNewUnit] = useState('ขวด');
-  const [newDesc, setNewDesc] = useState('');
-  const [recipeRows, setRecipeRows] = useState<
-    { materialId: string; quantityRequired: number; unit: string }[]
-  >([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [unit, setUnit] = useState('ขวด');
+  const [desc, setDesc] = useState('');
+  const [recipeRows, setRecipeRows] = useState<RecipeRowState[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Delete Modal
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -73,17 +112,19 @@ export default function RecipesPage() {
     }
   }
 
-  function handleOpenModal() {
-    setNewCode(`FG-${Date.now().toString().slice(-4)}`);
-    setNewName('');
-    setNewUnit('ขวด');
-    setNewDesc('');
+  function handleOpenCreateModal() {
+    setEditingProduct(null);
+    setCode(`FG-${Date.now().toString().slice(-4)}`);
+    setName('');
+    setUnit('ขวด');
+    setDesc('');
     if (materials.length > 0) {
+      const defaultUnit = isLiquidUnit(materials[0].baseUnit) ? 'L' : 'kg';
       setRecipeRows([
         {
           materialId: materials[0].id,
           quantityRequired: 0.1,
-          unit: materials[0].baseUnit,
+          unit: defaultUnit,
         },
       ]);
     } else {
@@ -92,14 +133,31 @@ export default function RecipesPage() {
     setShowModal(true);
   }
 
+  function handleOpenEditModal(p: Product) {
+    setEditingProduct(p);
+    setCode(p.code);
+    setName(p.name);
+    setUnit(p.unit);
+    setDesc(p.description || '');
+    setRecipeRows(
+      p.recipeItems.map((item) => ({
+        materialId: item.materialId,
+        quantityRequired: item.quantityRequired,
+        unit: item.unit || item.material?.baseUnit || 'kg',
+      }))
+    );
+    setShowModal(true);
+  }
+
   function handleAddRecipeRow() {
     if (materials.length === 0) return;
+    const defaultUnit = isLiquidUnit(materials[0].baseUnit) ? 'L' : 'kg';
     setRecipeRows([
       ...recipeRows,
       {
         materialId: materials[0].id,
-        quantityRequired: 0.05,
-        unit: materials[0].baseUnit,
+        quantityRequired: defaultUnit === 'g' || defaultUnit === 'ml' ? 50 : 0.05,
+        unit: defaultUnit,
       },
     ]);
   }
@@ -108,23 +166,63 @@ export default function RecipesPage() {
     setRecipeRows(recipeRows.filter((_, i) => i !== index));
   }
 
-  async function handleCreateProduct(e: React.FormEvent) {
+  function handleMaterialChange(index: number, newMatId: string) {
+    const newMat = materials.find((m) => m.id === newMatId);
+    setRecipeRows((prev) => {
+      const updated = [...prev];
+      const defaultUnit = newMat ? (isLiquidUnit(newMat.baseUnit) ? 'L' : 'kg') : 'kg';
+      updated[index] = {
+        ...updated[index],
+        materialId: newMatId,
+        unit: defaultUnit,
+      };
+      return updated;
+    });
+  }
+
+  function handleUnitChange(index: number, newUnit: string) {
+    setRecipeRows((prev) => {
+      const updated = [...prev];
+      const oldUnit = updated[index].unit;
+      const oldQty = updated[index].quantityRequired;
+      let newQty = oldQty;
+
+      // Smart auto-conversion between kg <-> g and L <-> ml
+      if ((oldUnit === 'kg' && newUnit === 'g') || (oldUnit === 'L' && newUnit === 'ml')) {
+        newQty = Number((oldQty * 1000).toFixed(4));
+      } else if ((oldUnit === 'g' && newUnit === 'kg') || (oldUnit === 'ml' && newUnit === 'L')) {
+        newQty = Number((oldQty / 1000).toFixed(4));
+      }
+
+      updated[index] = {
+        ...updated[index],
+        unit: newUnit,
+        quantityRequired: newQty,
+      };
+      return updated;
+    });
+  }
+
+  async function handleSaveProduct(e: React.FormEvent) {
     e.preventDefault();
-    if (!newCode || !newName || recipeRows.length === 0) {
+    if (!code || !name || recipeRows.length === 0) {
       alert('กรุณากรอกข้อมูลสินค้าและเลือกวัตถุดิบอย่างน้อย 1 รายการ');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/products', {
-        method: 'POST',
+      const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
+      const method = editingProduct ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: newCode,
-          name: newName,
-          unit: newUnit,
-          description: newDesc,
+          code,
+          name,
+          unit,
+          description: desc,
           recipeItems: recipeRows,
         }),
       });
@@ -134,7 +232,7 @@ export default function RecipesPage() {
         fetchData();
       } else {
         const err = await res.json();
-        alert(err.error || 'สร้างสูตรไม่สำเร็จ');
+        alert(err.error || 'บันทึกสูตรไม่สำเร็จ');
       }
     } catch (e) {
       console.error(e);
@@ -143,22 +241,44 @@ export default function RecipesPage() {
     }
   }
 
+  async function handleDeleteProduct() {
+    if (!deletingProduct) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/products/${deletingProduct.id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setDeletingProduct(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'ลบสูตรไม่สำเร็จ');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 pb-20 md:pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FlaskConical className="w-6 h-6 text-indigo-600" />
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <FlaskConical className="w-5 h-5 text-indigo-600" />
             สูตรการผลิตสินค้า (Bill of Materials - BOM)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            กำหนดสัดส่วนวัตถุดิบต่อ 1 หน่วยสินค้า เพื่อใช้คำนวณเบิกวัตถุดิบและตัดสต็อกอัตโนมัติ
+          <p className="text-xs text-slate-500 mt-0.5">
+            กำหนดอัตราส่วนวัตถุดิบต่อ 1 หน่วยสินค้า • รองรับของแข็ง (kg, g) และของเหลว (L, ml) พร้อมคำนวณเบิกผลิตอัตโนมัติ
           </p>
         </div>
 
         <button
-          onClick={handleOpenModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
+          onClick={handleOpenCreateModal}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-200 transition"
         >
           <Plus className="w-4 h-4" />
           <span>สร้างสูตรสินค้าใหม่</span>
@@ -166,76 +286,109 @@ export default function RecipesPage() {
       </div>
 
       {isLoading ? (
-        <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-          กำลังโหลดรายการสูตรสินค้า...
+        <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-300" />
+          <p className="text-sm">กำลังโหลดรายการสูตรสินค้า...</p>
         </div>
       ) : products.length === 0 ? (
-        <div className="bg-white p-12 rounded-xl border border-slate-200 text-center">
+        <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
           <FlaskConical className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-800">ยังไม่มีสูตรสินค้าในระบบ</h3>
           <p className="text-xs text-slate-500 mt-1">กดปุ่มสร้างสูตรสินค้าใหม่เพื่อกำหนดสัดส่วนวัตถุดิบ</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {products.map((p) => (
             <div
               key={p.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between"
+              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between hover:border-slate-300 transition"
             >
               <div className="p-5">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-bold text-slate-900">{p.name}</h3>
-                    </div>
+                    <h3 className="text-base font-bold text-slate-900">{p.name}</h3>
                     <div className="text-xs font-mono font-semibold text-indigo-700 mt-0.5">
                       {p.code} • หน่วยผลิต: {p.unit}
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {p.recipeItems.length} วัตถุดิบ
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      {p.recipeItems.length} วัตถุดิบ
+                    </span>
+                    <button
+                      onClick={() => handleOpenEditModal(p)}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
+                      title="แก้ไขสูตรนี้"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingProduct(p)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition"
+                      title="ลบสูตรนี้"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {p.description && (
-                  <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                     {p.description}
                   </p>
                 )}
 
                 <div className="mt-4">
-                  <h4 className="text-xs font-bold text-slate-600 uppercase mb-2">
+                  <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
                     สัดส่วนวัตถุดิบต่อ 1 {p.unit}:
                   </h4>
                   <div className="space-y-1.5">
-                    {p.recipeItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Package className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-semibold text-slate-800">
-                            {item.material.name}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            ({item.material.code})
-                          </span>
+                    {p.recipeItems.map((item) => {
+                      const isSubUnit = 
+                        (item.unit === 'g' && item.material.baseUnit === 'kg') ||
+                        (item.unit === 'ml' && item.material.baseUnit === 'L');
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <div>
+                              <span className="font-semibold text-slate-800">
+                                {item.material.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono ml-1">
+                                ({item.material.code})
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-slate-900 text-xs">
+                              {item.quantityRequired.toLocaleString()} {item.unit}
+                            </span>
+                            {isSubUnit && (
+                              <div className="text-[10px] text-slate-400">
+                                (= {(item.quantityRequired / 1000).toFixed(4)} {item.material.baseUnit} ในคลัง)
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-bold text-slate-900">
-                          {item.quantityRequired} {item.unit}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-400">สูตรพร้อมใช้งาน</span>
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  สูตรพร้อมเบิกผลิต
+                </span>
                 <Link
                   href={`/production?productId=${p.id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
                 >
                   <Calculator className="w-3.5 h-3.5" />
                   <span>คำนวณเบิกผลิตสินค้านี้</span>
@@ -247,52 +400,61 @@ export default function RecipesPage() {
         </div>
       )}
 
-      {/* Create Product & BOM Modal */}
+      {/* ── Modal: Create / Edit Product & BOM ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">
-              กำหนดสินค้าและสูตรการผลิตใหม่ (BOM)
-            </h3>
-            <form onSubmit={handleCreateProduct} className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingProduct ? `แก้ไขสูตรสินค้า: ${editingProduct.name}` : 'สร้างสูตรการผลิตสินค้าใหม่ (BOM)'}
+                </h3>
+                <p className="text-xs text-slate-400">กำหนดสินค้าและอัตราส่วนการใช้วัตถุดิบ</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     รหัสสินค้า *
                   </label>
                   <input
                     type="text"
                     required
-                    value={newCode}
-                    onChange={(e) => setNewCode(e.target.value)}
-                    className="w-full px-3 py-2 text-sm font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     หน่วยนับสินค้า *
                   </label>
                   <input
                     type="text"
                     required
                     placeholder="เช่น ชิ้น, ขวด, กล่อง"
-                    value={newUnit}
-                    onChange={(e) => setNewUnit(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   ชื่อสินค้าสำเร็จรูป *
                 </label>
                 <input
                   type="text"
                   required
                   placeholder="เช่น สเปรย์แอลกอฮอล์ 100ml, เจลล้างมือ"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 text-sm font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
@@ -304,102 +466,164 @@ export default function RecipesPage() {
                 <input
                   type="text"
                   placeholder="เช่น สูตรความเข้มข้น 75% กลิ่นอโรม่า"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
 
               {/* Recipe Items Form */}
-              <div className="pt-2 border-t border-slate-200">
+              <div className="pt-3 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase">
-                    วัตถุดิบที่ต้องใช้ต่อ 1 {newUnit || 'หน่วย'}:
-                  </label>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 uppercase">
+                      วัตถุดิบที่ต้องใช้ต่อ 1 {unit || 'หน่วย'}:
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      ของแข็งเลือก <strong>kg หรือ g</strong> • ของเหลวเลือก <strong>L หรือ ml</strong> ได้ทันที
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={handleAddRecipeRow}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-50 transition"
                   >
                     <Plus className="w-3.5 h-3.5" /> เพิ่มวัตถุดิบ
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                   {recipeRows.map((row, index) => {
                     const mat = materials.find((m) => m.id === row.materialId);
+                    const baseUnit = mat?.baseUnit || 'kg';
+                    const availableUnits = getAvailableUnitsForMaterial(baseUnit);
+
                     return (
                       <div
                         key={index}
-                        className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200"
+                        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200"
                       >
-                        <select
-                          value={row.materialId}
-                          onChange={(e) => {
-                            const newMat = materials.find((m) => m.id === e.target.value);
-                            const updated = [...recipeRows];
-                            updated[index].materialId = e.target.value;
-                            if (newMat) updated[index].unit = newMat.baseUnit;
-                            setRecipeRows(updated);
-                          }}
-                          className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded bg-white font-medium"
-                        >
-                          {materials.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              [{m.code}] {m.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <div className="w-24">
-                          <input
-                            type="number"
-                            step="any"
-                            placeholder="จำนวน"
-                            value={row.quantityRequired}
-                            onChange={(e) => {
-                              const updated = [...recipeRows];
-                              updated[index].quantityRequired = parseFloat(e.target.value) || 0;
-                              setRecipeRows(updated);
-                            }}
-                            className="w-full px-2 py-1.5 text-xs text-right font-bold border border-slate-200 rounded bg-white"
-                          />
+                        {/* Material Selector */}
+                        <div className="flex-1 min-w-0">
+                          <select
+                            value={row.materialId}
+                            onChange={(e) => handleMaterialChange(index, e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            {materials.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                [{m.code}] {m.name} ({m.baseUnit})
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
-                        <span className="text-xs font-semibold text-slate-500 w-10">
-                          {row.unit}
-                        </span>
+                        {/* Quantity and Unit Row */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Quantity Input */}
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              required
+                              placeholder="จำนวน"
+                              value={row.quantityRequired}
+                              onChange={(e) => {
+                                const updated = [...recipeRows];
+                                updated[index].quantityRequired = parseFloat(e.target.value) || 0;
+                                setRecipeRows(updated);
+                              }}
+                              className="w-full px-2 py-1.5 text-xs text-right font-bold border border-slate-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveRecipeRow(index)}
-                          className="p-1 text-slate-400 hover:text-rose-600"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          {/* Unit Selector: kg/g for solid, L/ml for liquid */}
+                          <select
+                            value={row.unit}
+                            onChange={(e) => handleUnitChange(index, e.target.value)}
+                            className="px-2 py-1.5 text-xs font-bold border border-indigo-200 rounded-lg bg-indigo-50 text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <optgroup label="ของแข็ง (Solid)">
+                              <option value="kg">kg (กก.)</option>
+                              <option value="g">g (กรัม)</option>
+                            </optgroup>
+                            <optgroup label="ของเหลว (Liquid)">
+                              <option value="L">L (ลิตร)</option>
+                              <option value="ml">ml (มล.)</option>
+                            </optgroup>
+                            {!['kg', 'g', 'l', 'ml'].includes(row.unit.toLowerCase()) && (
+                              <optgroup label="หน่วยเดิม">
+                                <option value={row.unit}>{row.unit}</option>
+                              </optgroup>
+                            )}
+                          </select>
+
+                          {/* Remove Row Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipeRow(index)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title="ลบแถวนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm"
                 >
-                  {isSubmitting ? 'กำลังบันทึก...' : 'บันทึกสูตรสินค้า'}
+                  {isSubmitting ? 'กำลังบันทึก...' : editingProduct ? 'บันทึกการแก้ไข' : 'บันทึกสูตรสินค้า'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deletingProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">ยืนยันการลบสูตรสินค้า</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                คุณต้องการลบสูตร <strong>"{deletingProduct.name}"</strong> ({deletingProduct.code}) ใช่หรือไม่?
+              </p>
+            </div>
+            <div className="flex gap-2.5 mt-5">
+              <button
+                onClick={() => setDeletingProduct(null)}
+                className="flex-1 px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleDeleteProduct}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition disabled:opacity-50"
+              >
+                {isDeleting ? 'กำลังลบ...' : 'ยืนยันการลบ'}
+              </button>
+            </div>
           </div>
         </div>
       )}
