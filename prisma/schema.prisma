@@ -1,0 +1,120 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Section {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String?
+  materials   Material[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Material {
+  id             String             @id @default(cuid())
+  code           String             @unique
+  name           String
+  sectionId      String?
+  section        Section?           @relation(fields: [sectionId], references: [id])
+  baseUnit       String             @default("kg")
+  minSafetyStock Float              @default(0)
+  lots           MaterialLot[]
+  transactions   StockTransaction[]
+  recipeItems    RecipeItem[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model MaterialLot {
+  id                String             @id @default(cuid())
+  materialId        String
+  material          Material           @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  lotNumber         String
+  receiveDate       DateTime           @default(now())
+  mfgDate           DateTime?
+  expDate           DateTime?
+  initialQuantity   Float
+  quantityRemaining Float
+  costPerUnit       Float?             @default(0)
+  status            String             @default("ACTIVE")
+  transactions      StockTransaction[]
+  requisitionItems  RequisitionItem[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model StockTransaction {
+  id              String       @id @default(cuid())
+  materialId      String
+  material        Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  lotId           String?
+  lot             MaterialLot? @relation(fields: [lotId], references: [id])
+  type            String       // INBOUND, OUTBOUND, PRODUCTION_ISSUE, ADJUSTMENT
+  quantity        Float
+  lotBalanceAfter Float?
+  totalStockAfter Float?
+  transactionDate DateTime     @default(now())
+  documentRef     String?
+  remarks         String?
+  createdBy       String?
+  createdAt       DateTime     @default(now())
+}
+
+model Product {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  name             String
+  unit             String            @default("ชิ้น")
+  description      String?
+  recipeItems      RecipeItem[]
+  productionOrders ProductionOrder[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model RecipeItem {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  materialId       String
+  material         Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  quantityRequired Float
+  unit             String   @default("kg")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ProductionOrder {
+  id               String            @id @default(cuid())
+  orderNo          String            @unique
+  productId        String
+  product          Product           @relation(fields: [productId], references: [id])
+  targetQuantity   Float
+  status           String            @default("DRAFT") // DRAFT, ISSUED, COMPLETED, CANCELLED
+  requestedBy      String?
+  approvedBy       String?
+  notes            String?
+  issuedAt         DateTime?
+  requisitionItems RequisitionItem[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model RequisitionItem {
+  id               String          @id @default(cuid())
+  orderId          String
+  order            ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  materialLotId    String
+  lot              MaterialLot     @relation(fields: [materialLotId], references: [id])
+  quantityDeducted Float
+  deductionRule    String          @default("FEFO")
+  createdAt        DateTime        @default(now())
+}
