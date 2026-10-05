@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Info,
 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 interface Transaction {
   id: string;
@@ -75,9 +76,7 @@ function groupByDate(transactions: Transaction[]) {
   const groups: { date: string; items: Transaction[] }[] = [];
   const seen = new Map<string, Transaction[]>();
   for (const tx of transactions) {
-    const d = new Date(tx.transactionDate).toLocaleDateString('th-TH-u-ca-gregory', {
-      year: 'numeric', month: 'long', day: 'numeric',
-    });
+    const d = formatDate(tx.transactionDate);
     if (!seen.has(d)) { seen.set(d, []); groups.push({ date: d, items: seen.get(d)! }); }
     seen.get(d)!.push(tx);
   }
@@ -225,7 +224,14 @@ export default function TransactionsPage() {
                             <div className="font-semibold text-slate-900">{tx.material.name}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{tx.material.code}</div>
                           </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{tx.lot?.lotNumber || '-'}</td>
+                          <td className="py-2.5 px-3 font-mono">
+                            <div className="font-bold text-blue-700">{tx.lot?.lotNumber || '-'}</div>
+                            {tx.lot?.expDate && (
+                              <div className="text-[10px] text-slate-400 font-normal font-sans">
+                                EXP: {formatDate(tx.lot.expDate)}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3 text-right font-bold text-slate-900">
                             <span className={tx.type === 'INBOUND' ? 'text-emerald-700' : 'text-rose-600'}>
                               {tx.type === 'INBOUND' ? '+' : '-'}{tx.quantity.toLocaleString()}

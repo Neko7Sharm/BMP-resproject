@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import PrintControls from '@/components/PrintControls';
+import { formatDate } from '@/lib/dateUtils';
 
 export const revalidate = 0;
 
@@ -28,11 +29,7 @@ export default async function PrintRequisitionPage({
     return <div className="p-8 text-center text-rose-600">ไม่พบเอกสารคำสั่งผลิต</div>;
   }
 
-  const orderDate = new Date(order.createdAt).toLocaleDateString('th-TH-u-ca-gregory', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const orderDate = formatDate(order.createdAt);
 
   return (
     <div className="max-w-4xl mx-auto bg-white p-6 sm:p-10 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0 print:max-w-none">
@@ -102,9 +99,7 @@ export default async function PrintRequisitionPage({
             </thead>
             <tbody className="divide-y divide-slate-200">
               {order.requisitionItems.map((item, idx) => {
-                const expDateStr = item.lot.expDate
-                  ? new Date(item.lot.expDate).toLocaleDateString('th-TH-u-ca-gregory')
-                  : '-';
+                const expDateStr = formatDate(item.lot.expDate);
                 return (
                   <tr key={item.id} className="text-slate-800">
                     <td className="py-2.5 px-3 border-r border-slate-300 text-center font-mono">{idx + 1}</td>

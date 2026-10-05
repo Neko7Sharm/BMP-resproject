@@ -20,6 +20,7 @@ import {
   Info,
   Check,
 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 interface SuggestedLot {
   lotId: string;
@@ -539,7 +540,7 @@ function ProductionContent() {
                       {mat.suggestedLots.map((lot) => {
                         const currentAlloc = allocations[lot.lotId] ?? lot.allocatedQuantity;
                         const expFormatted = lot.expDate
-                          ? new Date(lot.expDate).toLocaleDateString('th-TH-u-ca-gregory')
+                          ? formatDate(lot.expDate)
                           : 'ไม่ระบุ';
 
                         return (

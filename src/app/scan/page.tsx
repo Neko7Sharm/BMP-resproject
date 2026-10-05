@@ -26,6 +26,9 @@ interface ScanResult {
   materialName: string;
   unit: string;
   cardNo: string;
+  formYear?: number | null;
+  sheetNumber?: string | null;
+  formYearInfo?: string;
   creator: string;
   position: string;
   rows: StockRow[];
@@ -225,11 +228,99 @@ export default function ScanPage() {
     setScanResult({ ...scanResult, rows: scanResult.rows.filter(r => r.id !== rowId) });
   };
 
+  // Normalize date input to DD/MM/YYYY with 4-digit CE year
+  const normalizeDateToCE = (val: string): string => {
+    if (!val) return '';
+    const trimmed = val.trim();
+    // YYYY-MM-DD
+    const isoMatch = trimmed.match(/^(\d{2,4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$/);
+    if (isoMatch && parseInt(isoMatch[1]) > 31) {
+      let y = parseInt(isoMatch[1]);
+      if (y > 2400) y -= 543;
+      else if (y < 100) y = y >= 40 ? (y + 2500) - 543 : 2000 + y;
+      const m = String(parseInt(isoMatch[2])).padStart(2, '0');
+      const d = String(parseInt(isoMatch[3])).padStart(2, '0');
+      return `${d}/${m}/${y}`;
+    }
+    // DD/MM/YYYY
+    const dmyMatch = trimmed.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{2,4})$/);
+    if (dmyMatch) {
+      const d = String(parseInt(dmyMatch[1])).padStart(2, '0');
+      const m = String(parseInt(dmyMatch[2])).padStart(2, '0');
+      let y = parseInt(dmyMatch[3]);
+      if (y > 2400) y -= 543;
+      else if (y < 100) y = y >= 40 ? (y + 2500) - 543 : 2000 + y;
+      return `${d}/${m}/${y}`;
+    }
+    return trimmed;
+  };
+
+  // Normalize expDate input to DD-MM-YYYY with 4-digit CE year
+  const normalizeExpDateToCE = (val: string): string => {
+    if (!val) return '';
+    const trimmed = val.trim();
+    // YYYY-MM-DD or YYYY/MM/DD (year first, > 31)
+    const isoMatch = trimmed.match(/^(\d{2,4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$/);
+    if (isoMatch && parseInt(isoMatch[1]) > 31) {
+      let y = parseInt(isoMatch[1]);
+      if (y > 2400) y -= 543;
+      else if (y < 100) y = y >= 40 ? (y + 2500) - 543 : 2000 + y;
+      const m = String(parseInt(isoMatch[2])).padStart(2, '0');
+      const d = String(parseInt(isoMatch[3])).padStart(2, '0');
+      return `${d}-${m}-${y}`;
+    }
+    // DD/MM/YYYY or DD-MM-YYYY (day first, year last > 1000)
+    const dmyMatch = trimmed.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{2,4})$/);
+    if (dmyMatch) {
+      const d = String(parseInt(dmyMatch[1])).padStart(2, '0');
+      const m = String(parseInt(dmyMatch[2])).padStart(2, '0');
+      let y = parseInt(dmyMatch[3]);
+      if (y > 2400) y -= 543;
+      else if (y < 100) y = y >= 40 ? (y + 2500) - 543 : 2000 + y;
+      return `${d}-${m}-${y}`;
+    }
+    return trimmed;
+  };
+
+  // Parse card number (e.g. 01/26 -> sheet 01, year 2026)
+  const parseCardNoInfo = (val: string) => {
+    if (!val) return { sheet: '', year: null, text: '' };
+    const m = val.trim().match(/^([A-Za-z0-9\.\-]+)\s*[\/\-]\s*(\d{2,4})$/);
+    if (m) {
+      const sheet = m[1];
+      let rawY = parseInt(m[2]);
+      if (rawY > 2400) rawY -= 543;
+      else if (rawY < 100) rawY = rawY >= 40 ? (rawY + 2500) - 543 : 2000 + rawY;
+      return {
+        sheet,
+        year: rawY,
+        text: `ใบที่ ${sheet} ของปี ค.ศ. ${rawY}`,
+      };
+    }
+    return { sheet: '', year: null, text: '' };
+  };
+
+  const handleCardNoChange = (newVal: string) => {
+    if (!scanResult) return;
+    const parsed = parseCardNoInfo(newVal);
+    setScanResult({
+      ...scanResult,
+      cardNo: newVal,
+      formYear: parsed.year !== null ? parsed.year : scanResult.formYear,
+      sheetNumber: parsed.sheet || scanResult.sheetNumber,
+      formYearInfo: parsed.text || scanResult.formYearInfo,
+    });
+  };
+
   const addRow = () => {
     if (!scanResult) return;
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
     const newRow: StockRow = {
       id: `r-${Date.now()}`,
-      date: new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      date: `${d}/${m}/${y}`,
       lotNumber: '', inboundQty: 0, outboundQty: 0, balanceQty: 0, totalQty: 0, expDate: '', remarks: '',
     };
     setScanResult({ ...scanResult, rows: [...scanResult.rows, newRow] });
@@ -253,6 +344,7 @@ export default function ScanPage() {
             sectionId: selectedSectionId || null,
             documentRef: scanResult.cardNo ? `STOCK-CARD-${scanResult.cardNo}` : 'STOCK-CARD-IMPORT',
             creator: scanResult.creator,
+            formYear: scanResult.formYear || null,
             rows: scanResult.rows,
           },
         }),
@@ -632,13 +724,51 @@ export default function ScanPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">เลขที่ใบการ์ด</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-600">เลขที่ของฟอร์ม / ใบการ์ด</label>
+                    {scanResult.formYearInfo && (
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+                        {scanResult.formYearInfo}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={scanResult.cardNo}
-                    onChange={e => setScanResult({ ...scanResult, cardNo: e.target.value })}
-                    className="w-full px-3 py-2 text-sm font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                    placeholder="เช่น 01/26 หรือ 006/26"
+                    onChange={e => handleCardNoChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-mono font-bold text-slate-800 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    เช่น <span className="font-mono font-semibold text-purple-700">01/26</span> = ใบที่ 1 ของปี ค.ศ. 2026
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    ปีที่ผลิต / ปีของฟอร์ม (ค.ศ.)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={scanResult.formYear ?? ''}
+                      placeholder="เช่น 2026"
+                      onChange={e => {
+                        const y = parseInt(e.target.value) || null;
+                        setScanResult({
+                          ...scanResult,
+                          formYear: y,
+                          formYearInfo: y ? `ปี ค.ศ. ${y}${scanResult.sheetNumber ? ` (ใบที่ ${scanResult.sheetNumber})` : ''}` : '',
+                        });
+                      }}
+                      className="w-full px-3 py-2 text-sm font-bold font-mono text-purple-900 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                    <span className="absolute right-3 top-2.5 text-[11px] font-bold text-slate-400">
+                      ค.ศ.
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    ถอดจากเลขที่ใบการ์ดอัตโนมัติ
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-600 block mb-1">ผู้จัดทำ</label>
@@ -694,9 +824,11 @@ export default function ScanPage() {
                           <input
                             type="text"
                             value={row.date}
-                            placeholder="วว/ดด/ปปปป"
+                            placeholder="วว/ดด/ค.ศ."
                             onChange={e => updateRow(row.id, 'date', e.target.value)}
+                            onBlur={e => updateRow(row.id, 'date', normalizeDateToCE(e.target.value))}
                             className="w-24 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs font-mono outline-none transition"
+                            title="วันที่ (ระบุเป็นปี ค.ศ. เช่น 07/08/2026)"
                           />
                         </td>
                         {/* Lot */}
@@ -754,9 +886,11 @@ export default function ScanPage() {
                           <input
                             type="text"
                             value={row.expDate}
-                            placeholder="YYYY-MM-DD"
+                            placeholder="DD-MM-YYYY"
                             onChange={e => updateRow(row.id, 'expDate', e.target.value)}
+                            onBlur={e => updateRow(row.id, 'expDate', normalizeExpDateToCE(e.target.value))}
                             className="w-28 px-2 py-1 bg-amber-50/60 hover:bg-white focus:bg-white border border-transparent hover:border-amber-300 focus:border-amber-500 rounded text-xs font-mono text-amber-900 outline-none transition"
+                            title="วันหมดอายุ (ปี ค.ศ. เช่น 19-08-2027)"
                           />
                         </td>
                         {/* Remarks */}

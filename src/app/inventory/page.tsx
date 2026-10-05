@@ -21,6 +21,7 @@ import {
   ToggleRight,
   Loader2,
 } from 'lucide-react';
+import { formatDate } from '@/lib/dateUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,10 +60,6 @@ interface Section {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('th-TH-u-ca-gregory');
-}
 
 function getExpirationBadge(expDateStr: string | null) {
   if (!expDateStr) return <span className="text-slate-400 text-xs">-</span>;
@@ -622,8 +619,8 @@ export default function InventoryPage() {
                             <thead className="bg-slate-50 text-slate-500 uppercase border-b border-slate-200">
                               <tr>
                                 <th className="py-2.5 px-3">เลขล็อต</th>
-                                <th className="py-2.5 px-3">วันที่รับ</th>
-                                <th className="py-2.5 px-3">วันหมดอายุ</th>
+                                <th className="py-2.5 px-3">วันที่รับ (DD-MM-YYYY)</th>
+                                <th className="py-2.5 px-3">วันหมดอายุ (DD-MM-YYYY)</th>
                                 <th className="py-2.5 px-3 text-right">ยอดรับ</th>
                                 <th className="py-2.5 px-3 text-right">คงเหลือ</th>
                                 <th className="py-2.5 px-3 text-right">สัดส่วน</th>
