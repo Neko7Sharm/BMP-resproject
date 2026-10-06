@@ -26,7 +26,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { productId, targetQuantity, orderNo, requestedBy, notes, autoDeduct, allocations } = body;
+    const { productId, targetQuantity, orderNo, requestedBy, notes, autoDeduct, allocations, orderDate } = body;
 
     if (!productId || !targetQuantity || Number(targetQuantity) <= 0) {
       return NextResponse.json(
@@ -36,8 +36,9 @@ export async function POST(request: Request) {
     }
 
     const generatedOrderNo = orderNo || `PRD-${Date.now().toString().slice(-6)}`;
+    const effectiveDate = orderDate ? new Date(orderDate) : new Date();
 
-    // 1. สร้างเอกสารคำสั่งผลิต ProductionOrder
+    // 1. สร้างเอกสารคำสั่งผลิต ProductionOrder (รองรับวันที่ย้อนหลัง)
     const order = await prisma.productionOrder.create({
       data: {
         orderNo: generatedOrderNo,
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
         requestedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
         notes: notes || null,
         status: 'DRAFT',
+        createdAt: effectiveDate,
       },
       include: { product: true },
     });
@@ -55,7 +57,8 @@ export async function POST(request: Request) {
       const updatedOrder = await executeProductionRequisition(
         order.id,
         allocations,
-        requestedBy || 'เจ้าหน้าที่เบิกจ่าย'
+        requestedBy || 'เจ้าหน้าที่เบิกจ่าย',
+        effectiveDate
       );
       return NextResponse.json(updatedOrder, { status: 201 });
     }

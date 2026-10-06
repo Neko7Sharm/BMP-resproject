@@ -3,7 +3,7 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 
 export const metadata: Metadata = {
-  title: 'BMP Raw Material & MRP Resource Management',
+  title: 'KMP Raw Material & MRP Resource Management',
   description: 'ระบบบริหารจัดการทรัพยากรวัตถุดิบ บันทึกรับเข้า-จ่ายออก สแกนสต็อกการ์ด และคำนวณเบิกผลิตอัตโนมัติ',
 };
 
@@ -20,7 +20,7 @@ export default function RootLayout({
           {children}
         </main>
         <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print">
-          BMP Raw Materials Management System • SQLite & Prisma ORM Connected
+          KMP Raw Materials Management System • SQLite & Prisma ORM Connected
         </footer>
       </body>
     </html>

@@ -183,7 +183,8 @@ export async function calculateProductionBOM(
 export async function executeProductionRequisition(
   orderId: string,
   allocations: { lotId: string; quantity: number }[],
-  issuerName: string = 'เจ้าหน้าที่คลัง'
+  issuerName: string = 'เจ้าหน้าที่คลัง',
+  issueDate?: Date
 ) {
   return await prisma.$transaction(async (tx) => {
     const order = await tx.productionOrder.findUnique({
@@ -198,6 +199,8 @@ export async function executeProductionRequisition(
     if (order.status === 'ISSUED') {
       throw new Error('คำสั่งผลิตนี้ได้รับการตัดจ่ายสต็อกไปแล้ว');
     }
+
+    const effectiveDate = issueDate || order.createdAt || new Date();
 
     for (const alloc of allocations) {
       if (alloc.quantity <= 0) continue;
@@ -236,6 +239,7 @@ export async function executeProductionRequisition(
           materialLotId: lot.id,
           quantityDeducted: alloc.quantity,
           deductionRule: 'FEFO',
+          createdAt: effectiveDate,
         },
       });
 
@@ -250,6 +254,8 @@ export async function executeProductionRequisition(
           documentRef: order.orderNo,
           remarks: `เบิกเพื่อผลิต ${order.product.name} จำนวน ${order.targetQuantity} ${order.product.unit}`,
           createdBy: issuerName,
+          transactionDate: effectiveDate,
+          createdAt: effectiveDate,
         },
       });
     }
@@ -259,7 +265,7 @@ export async function executeProductionRequisition(
       where: { id: order.id },
       data: {
         status: 'ISSUED',
-        issuedAt: new Date(),
+        issuedAt: effectiveDate,
         requestedBy: issuerName,
       },
       include: {

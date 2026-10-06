@@ -43,13 +43,15 @@ export async function POST(
 ) {
   try {
     const body = await request.json();
-    const { action, allocations, issuerName } = body;
+    const { action, allocations, issuerName, issueDate } = body;
 
     if (action === 'DEDUCT_STOCK') {
+      const effectiveDate = issueDate ? new Date(issueDate) : undefined;
       const updated = await executeProductionRequisition(
         params.id,
         allocations,
-        issuerName || 'เจ้าหน้าที่เบิกจ่าย'
+        issuerName || 'เจ้าหน้าที่เบิกจ่าย',
+        effectiveDate
       );
       return NextResponse.json(updated);
     }

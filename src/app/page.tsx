@@ -75,7 +75,7 @@ export default function DashboardPage() {
       <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-900 rounded-2xl p-5 sm:p-7 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
           <span className="inline-block px-2.5 py-0.5 bg-white/20 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-2">
-            BMP MRP System
+            KMP MRP System
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-snug">
             ระบบจัดการทรัพยากรวัตถุดิบ

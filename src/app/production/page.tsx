@@ -19,8 +19,12 @@ import {
   RefreshCw,
   Info,
   Check,
+  Calendar,
+  History,
+  CalendarPlus,
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
+import ProductionHistoryView from '@/components/ProductionHistoryView';
 
 interface SuggestedLot {
   lotId: string;
@@ -60,6 +64,11 @@ interface CalcResult {
 function ProductionContent() {
   const searchParams = useSearchParams();
   const initialProductId = searchParams.get('productId') || '';
+  const initialTab = searchParams.get('tab') === 'history' ? 'history' : 'calc';
+  const initialCreateBackdate = searchParams.get('createBackdate') === 'true';
+
+  const [activeTab, setActiveTab] = useState<'calc' | 'history'>(initialTab);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [products, setProducts] = useState<any[]>([]);
   const [selectedProductId, setSelectedProductId] = useState(initialProductId);
@@ -175,6 +184,7 @@ function ProductionContent() {
           notes,
           autoDeduct: true,
           allocations: flatAllocations,
+          orderDate,
         }),
       });
 
@@ -208,10 +218,42 @@ function ProductionContent() {
             คำนวณเบิกผลิต & จัดสรรตัดสต็อก FEFO
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            ระบุยอดสินค้าที่ต้องการผลิต → ระบบวิเคราะห์วัตถุดิบและแนะนำล็อตหมดอายุก่อน → ปรับแต่งก่อนเบิกจ่าย → ออกใบเบิก PDF
+            ระบุยอดสินค้าที่ต้องการผลิต → ระบบวิเคราะห์วัตถุดิบและแนะนำล็อตหมดอายุก่อน → ปรับแต่งก่อนเบิกจ่าย → ออกใบเบิก PDF (A4 2 แผ่น)
           </p>
         </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-xl">
+          <button
+            onClick={() => setActiveTab('calc')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+              activeTab === 'calc'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Calculator className="w-4 h-4" />
+            <span>⚡ คำนวณเบิกผลิต</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+              activeTab === 'history'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>📋 ประวัติ & ทำใบเบิกย้อนหลัง</span>
+          </button>
+        </div>
       </div>
+
+      {activeTab === 'history' ? (
+        <ProductionHistoryView products={products} initialCreateOpen={initialCreateBackdate} />
+      ) : (
+        <div className="space-y-6">
 
       {/* Success Notification with PDF Button */}
       {orderResult && (
@@ -468,7 +510,20 @@ function ProductionContent() {
             </div>
 
             {/* Editable Requisition Header Info */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-4 bg-purple-50/40 rounded-xl border border-purple-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 p-4 bg-purple-50/40 rounded-xl border border-purple-100">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-purple-600" />
+                  วันที่เบิกผลิต (วันที่เอกสาร)
+                </label>
+                <input
+                  type="date"
+                  value={orderDate}
+                  onChange={(e) => setOrderDate(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                   <Edit3 className="w-3 h-3 text-purple-600" />
@@ -502,7 +557,7 @@ function ProductionContent() {
                 </label>
                 <input
                   type="text"
-                  placeholder="เช่น สั่งผลิตล็อตประจำวัน สำหรับส่งคลังสินค้า"
+                  placeholder="เช่น สั่งผลิตล็อตประจำวัน"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
@@ -640,6 +695,8 @@ function ProductionContent() {
               </button>
             </div>
           </div>
+        </div>
+      )}
         </div>
       )}
     </div>

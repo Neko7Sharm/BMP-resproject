@@ -30,7 +30,7 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
   * หากในเอกสารเขียนปี พ.ศ. แบบ 2 หลัก (เช่น 68, 69) ให้แปลงเป็น ค.ศ. (เช่น 68 -> 2025, 69 -> 2026)
   * หากในเอกสารเขียนปี ค.ศ. แบบ 2 หลัก (เช่น 26, 27) ให้แปลงเป็น ค.ศ. 4 หลัก (เช่น 2026, 2027)
 - ช่อง date: ต้องเป็น format "วว/ดด/ปปปป" โดยที่ "ปปปป" ต้องเป็นปี ค.ศ. 4 หลักเท่านั้น (เช่น 07/08/2026) ห้ามเป็น พ.ศ.
-- ช่อง expDate: สกัดวันหมดอายุ EXP จากช่องหมายเหตุหรือช่องระบุวันหมดอายุ ถ้ามี ให้ใส่ใน expDate เป็น format "YYYY-MM-DD" โดยที่ "YYYY" ต้องเป็นปี ค.ศ. 4 หลักเท่านั้น (เช่น 2027-08-19) ถ้าไม่มีให้เป็น ""
+- ช่อง expDate: สกัดวันหมดอายุ EXP จากช่องหมายเหตุหรือช่องระบุวันหมดอายุ ถ้ามี ให้ใส่ใน expDate เป็น format "DD-MM-YYYY" โดยที่ปีต้องเป็น ค.ศ. 4 หลักเท่านั้น (เช่น 19-08-2027) ถ้าไม่มีให้เป็น ""
 - ตัวเลขทุกค่าให้เป็น number ไม่ใส่ comma
 - ***การสกัดเลขที่ของฟอร์ม (เลขที่ใบการ์ด / Card No.)***:
   * ในเอกสารมักเขียนในรูปแบบ [ลำดับใบ]/[ปี] เช่น "01/26", "006/26" หรือ "01/69"
@@ -57,7 +57,7 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
       "outboundQty": 0,
       "balanceQty": 0,
       "totalQty": 0,
-      "expDate": "YYYY-MM-DD (ปี ค.ศ. 4 หลัก เช่น 2027-08-19) หรือ empty string ถ้าไม่มี",
+      "expDate": "DD-MM-YYYY (ปี ค.ศ. 4 หลัก เช่น 19-08-2027) หรือ empty string ถ้าไม่มี",
       "remarks": "หมายเหตุ"
     }
   ]
@@ -154,7 +154,7 @@ function normalizeDateStr(rawDate: string): string {
   return trimmed;
 }
 
-// ---- Normalize EXP Date to YYYY-MM-DD with 4-digit CE year ----
+// ---- Normalize EXP Date to DD-MM-YYYY with 4-digit CE year ----
 function normalizeExpDateStr(rawExp: string, remarks?: string): string {
   let target = (rawExp || '').trim();
 
@@ -166,29 +166,29 @@ function normalizeExpDateStr(rawExp: string, remarks?: string): string {
       const d = String(parseInt(m[1])).padStart(2, '0');
       const mo = String(parseInt(m[2])).padStart(2, '0');
       const y = convertYearToCE(parseInt(m[3]));
-      return `${y}-${mo}-${d}`;
+      return `${d}-${mo}-${y}`;
     }
     return '';
   }
 
   if (!target) return '';
 
-  // Check if YYYY-MM-DD
+  // Check if YYYY-MM-DD (year first, > 31)
   const ymdMatch = target.match(/^(\d{2,4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})$/);
   if (ymdMatch && parseInt(ymdMatch[1]) > 31) {
     const y = convertYearToCE(parseInt(ymdMatch[1]));
     const m = String(parseInt(ymdMatch[2])).padStart(2, '0');
     const d = String(parseInt(ymdMatch[3])).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${d}-${m}-${y}`;
   }
 
-  // Check if DD/MM/YYYY
+  // Check if DD/MM/YYYY (day first, year last)
   const dmyMatch = target.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{2,4})$/);
   if (dmyMatch) {
     const d = String(parseInt(dmyMatch[1])).padStart(2, '0');
     const m = String(parseInt(dmyMatch[2])).padStart(2, '0');
     const y = convertYearToCE(parseInt(dmyMatch[3]));
-    return `${y}-${m}-${d}`;
+    return `${d}-${m}-${y}`;
   }
 
   return target;

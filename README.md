@@ -1,1 +1,1 @@
-# BMP-resproject
+# KMP-resproject

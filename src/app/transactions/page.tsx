@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   History,
   ArrowDownLeft,
@@ -10,6 +11,8 @@ import {
   Loader2,
   ChevronDown,
   Info,
+  Printer,
+  CalendarPlus,
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -130,6 +133,22 @@ export default function TransactionsPage() {
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">บันทึกความเคลื่อนไหวทุกรายการ ตรวจสอบย้อนหลังได้</p>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/production?tab=history&createBackdate=true"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+          >
+            <CalendarPlus className="w-3.5 h-3.5" />
+            <span>➕ ทำใบเบิกผลิตย้อนหลัง</span>
+          </Link>
+          <Link
+            href="/production?tab=history"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+          >
+            <span>ประวัติใบเบิกผลิต</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filter + Search */}
@@ -242,7 +261,19 @@ export default function TransactionsPage() {
                             {tx.lotBalanceAfter !== null ? `${tx.lotBalanceAfter.toLocaleString()} ${tx.material.baseUnit}` : '-'}
                           </td>
                           <td className="py-2.5 px-3">
-                            <div className="font-mono text-slate-600">{tx.documentRef || '-'}</div>
+                            <div className="font-mono text-slate-600 flex items-center gap-1.5 flex-wrap">
+                              <span>{tx.documentRef || '-'}</span>
+                              {tx.documentRef && tx.documentRef.startsWith('PRD-') && (
+                                <Link
+                                  href={`/production?tab=history&search=${tx.documentRef}`}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-semibold rounded border border-blue-200"
+                                  title="ดูประวัติและพิมพ์ใบเบิก"
+                                >
+                                  <Printer className="w-3 h-3" />
+                                  <span>ใบเบิก</span>
+                                </Link>
+                              )}
+                            </div>
                             {tx.remarks && <div className="text-[10px] text-slate-400 mt-0.5">{tx.remarks}</div>}
                           </td>
                           <td className="py-2.5 px-3 text-slate-500">{tx.createdBy || '-'}</td>

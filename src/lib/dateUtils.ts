@@ -1,5 +1,5 @@
 /**
- * Centralized Date Utilities for BMP MRP System
+ * Centralized Date Utilities for KMP MRP System
  * Ensures all dates across the system are consistently formatted as DD-MM-YYYY
  */
 

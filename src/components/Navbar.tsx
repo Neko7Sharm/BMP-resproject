@@ -66,11 +66,11 @@ export default function Navbar() {
           {/* Logo */}
           <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-200 font-bold text-sm">
-              B
+              K
             </div>
             <Link href="/" className="font-bold text-slate-900 hover:text-blue-600 transition text-sm leading-tight">
-              <span className="hidden sm:block">BMP Raw Materials</span>
-              <span className="block sm:hidden">BMP MRP</span>
+              <span className="hidden sm:block">KMP Raw Materials</span>
+              <span className="block sm:hidden">KMP MRP</span>
             </Link>
           </div>
 
