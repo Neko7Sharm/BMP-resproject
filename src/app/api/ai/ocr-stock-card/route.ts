@@ -275,16 +275,22 @@ export async function POST(request: Request) {
 
     // === ACTION: CHECK API KEY ===
     if (action === 'CHECK_KEY') {
-      const apiKey = process.env.GEMINI_API_KEY;
-      return NextResponse.json({ hasApiKey: !!(apiKey && apiKey.trim() !== '') });
+      // Check all available keys (GEMINI_API_KEY, GEMINI_API_KEY_2, ...)
+      const hasAnyKey = !!(process.env.GEMINI_API_KEY?.trim()) ||
+        Array.from({ length: 9 }, (_, i) => process.env[`GEMINI_API_KEY_${i + 2}`])
+          .some(k => k && k.trim() !== '');
+      return NextResponse.json({ hasApiKey: hasAnyKey });
     }
 
     // === ACTION: ANALYZE IMAGE ===
     if (action === 'ANALYZE') {
-      const apiKey = process.env.GEMINI_API_KEY;
+      // Check if any API key is available
+      const hasAnyKey = !!(process.env.GEMINI_API_KEY?.trim()) ||
+        Array.from({ length: 9 }, (_, i) => process.env[`GEMINI_API_KEY_${i + 2}`])
+          .some(k => k && k.trim() !== '');
 
-      // Try Gemini Vision first if API key exists
-      if (apiKey && apiKey.trim() !== '' && imageBase64) {
+      // Try Gemini Vision first if any API key exists
+      if (hasAnyKey && imageBase64) {
         try {
           const aiResult = await analyzeImageWithGemini(imageBase64, mimeType || 'image/jpeg');
           if (aiResult.success) {
@@ -359,7 +365,7 @@ export async function POST(request: Request) {
         success: true,
         data: fallbackData,
         engine: 'demo-mode',
-        message: !apiKey || apiKey.trim() === ''
+        message: !hasAnyKey
           ? '⚠️ ยังไม่ได้ตั้ง Gemini API Key — แสดงตัวอย่างข้อมูลจากใบการ์ดจริง กรุณาตั้งค่า API Key เพื่อเปิดใช้งาน AI วิเคราะห์ภาพจริง'
           : 'วิเคราะห์ด้วย Template Engine (ไม่มี API Key)',
       });
