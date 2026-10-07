@@ -40,6 +40,7 @@ const secondaryNav: NavItem[] = [
   { href: '/recipes', label: 'สูตรการผลิต (BOM)', icon: FlaskConical },
   { href: '/sections', label: 'โซนคลัง', icon: MapPin },
   { href: '/transactions', label: 'ประวัติรับ-จ่าย', icon: History },
+  { href: '/db-studio', label: 'DB Studio (จัดการฐานข้อมูล)', icon: Database },
   { href: '/settings', label: 'ตั้งค่า', icon: Settings },
 ];
 
@@ -143,21 +144,19 @@ export default function Navbar() {
             </div>
           </nav>
 
-          {/* Right: DB button + mobile menu */}
+          {/* Right: DB Studio button + mobile menu */}
           <div className="flex items-center gap-2">
-            <a
-              href="http://localhost:5555"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-white hover:bg-slate-900 transition shadow-sm"
-              title="เปิด Prisma Studio — ดูและแก้ไขข้อมูล Database โดยตรง"
+            <Link
+              href="/db-studio"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-white hover:bg-slate-900 transition shadow-sm"
+              title="DB Studio — ตรวจสอบและแก้ไขข้อมูลใน Database สำหรับผู้ดูแล"
             >
               <Database className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden lg:inline">DB Studio</span>
-            </a>
+              <span>DB Studio</span>
+            </Link>
             <span className="hidden lg:inline-flex items-center px-2 py-1 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
-              SQLite
+              DB Online
             </span>
 
             {/* Mobile hamburger */}

@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import {
   Settings, KeyRound, CheckCircle2, AlertCircle, ExternalLink,
-  Eye, EyeOff, Save, RefreshCw, Loader2, Info
+  Eye, EyeOff, Save, RefreshCw, Loader2, Info, Database, ChevronRight
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -165,6 +166,46 @@ export default function SettingsPage() {
             <span>
               API Key จะถูกบันทึกลงไฟล์ <code className="bg-slate-200 px-1 rounded font-mono">.env.local</code> บนเครื่องของคุณเท่านั้น ไม่มีการส่งข้อมูลออกนอกระบบ
               และไฟล์นี้ถูกตั้งค่าให้ Git ไม่ติดตาม (ปลอดภัย)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* DB Studio Management Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Database className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900 text-sm">DB Studio (จัดการและแก้ไขฐานข้อมูล)</h2>
+              <p className="text-xs text-slate-500">สำหรับผู้ดูแลระบบ: ตรวจสอบ แก้ไขข้อมูล และสำรองข้อมูลทุกตาราง</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+            <CheckCircle2 className="w-3.5 h-3.5" />พร้อมใช้งาน
+          </span>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            ระบบ <strong>DB Studio</strong> ช่วยให้คุณสามารถเข้าถึงข้อมูลทุกตาราง (วัตถุดิบ, ล็อต, ประวัติสต็อก, สูตรผลิต, คำสั่งผลิต) 
+            เพื่อตรวจสอบและกดแก้ไขค่าต่าง ๆ ได้อย่างสะดวก ปลอดภัย และเข้าใจง่ายผ่านหน้าเว็บ
+          </p>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <Link
+              href="/db-studio"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition"
+            >
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span>เปิดใช้งาน DB Studio ทันที</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            </Link>
+
+            <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+              URL: /db-studio
             </span>
           </div>
         </div>
