@@ -2,20 +2,27 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
 import prisma from '@/lib/prisma';
 
-// ---- AI Analysis Helper with Multi-Model Fallback & Retry ----
+// ---- AI Analysis Helper with Multi-API-Key & Multi-Model Fallback ----
 async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Promise<any> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === '') {
+  // Collect all available API keys from environment variables
+  const apiKeys: string[] = [];
+  const primaryKey = process.env.GEMINI_API_KEY;
+  if (primaryKey && primaryKey.trim() !== '') apiKeys.push(primaryKey.trim());
+  // Additional fallback keys: GEMINI_API_KEY_2, GEMINI_API_KEY_3, ...
+  for (let i = 2; i <= 10; i++) {
+    const extraKey = process.env[`GEMINI_API_KEY_${i}`];
+    if (extraKey && extraKey.trim() !== '') apiKeys.push(extraKey.trim());
+  }
+
+  if (apiKeys.length === 0) {
     return { success: false, reason: 'NO_API_KEY' };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-
   // List of vision-capable models verified to work with your API key
   const candidateModels = [
-    'gemini-3.5-flash',
-    'gemini-3.7-flash',
-    'gemini-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
   ];
 
   const prompt = `คุณเป็นผู้เชี่ยวชาญอ่านเอกสารใบสต็อกการ์ดคลังสินค้า (Stock Card / FR 1-6) ลายมือภาษาไทยและตัวเลข
@@ -70,39 +77,52 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
 
   let lastError: any = null;
 
-  for (const modelName of candidateModels) {
-    // Retry up to 1 time per candidate model with a brief backoff
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          ],
-        });
+  // Outer loop: try each API key in order (rotate on 429 rate limit)
+  for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
+    const currentKey = apiKeys[keyIdx];
+    const genAI = new GoogleGenerativeAI(currentKey);
+    let keyRateLimited = false;
 
-        const result = await model.generateContent([prompt, imagePart]);
-        const text = result.response.text().trim();
+    // Inner loop: try each model with the current API key
+    for (const modelName of candidateModels) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            safetySettings: [
+              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            ],
+          });
 
-        const jsonStr = text
-          .replace(/^```json\s*/i, '')
-          .replace(/^```\s*/i, '')
-          .replace(/\s*```$/i, '')
-          .trim();
+          const result = await model.generateContent([prompt, imagePart]);
+          const text = result.response.text().trim();
 
-        return { success: true, data: JSON.parse(jsonStr), usedModel: modelName };
-      } catch (err: any) {
-        lastError = err;
-        // Only retry on 429 rate limit (not on 404 model-not-found)
-        const isRateLimit = err?.message?.includes('429') || err?.message?.includes('high demand');
-        if (isRateLimit && attempt === 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          continue;
+          const jsonStr = text
+            .replace(/^```json\s*/i, '')
+            .replace(/^```\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+
+          return { success: true, data: JSON.parse(jsonStr), usedModel: modelName, usedKeyIndex: keyIdx + 1 };
+        } catch (err: any) {
+          lastError = err;
+          const isRateLimit = err?.message?.includes('429') || err?.message?.includes('quota') || err?.message?.includes('high demand');
+          if (isRateLimit) {
+            // Rate limited on this key — switch to next API key
+            keyRateLimited = true;
+            console.warn(`API key #${keyIdx + 1} rate limited (429), switching to next key...`);
+            break;
+          }
+          // Retry once on transient errors, skip model on others
+          if (attempt === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+          break;
         }
-        // For any other error (404, 500, etc.), skip to next model immediately
-        break;
       }
+      if (keyRateLimited) break; // Stop trying models with this key, rotate to next key
     }
   }
 
