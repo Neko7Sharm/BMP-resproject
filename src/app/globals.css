@@ -16,13 +16,13 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 6mm 8mm 6mm 8mm;
+    margin: 8mm 8mm 6mm 8mm;
   }
   html, body {
     background: white !important;
     color: black !important;
     width: 100% !important;
-    height: auto !important;
+    height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
@@ -42,11 +42,17 @@ body {
   }
   .print-page {
     width: 100% !important;
-    max-width: 100% !important;
+    height: 283mm !important;
+    max-height: 283mm !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

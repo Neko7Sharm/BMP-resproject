@@ -132,9 +132,9 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
 
   const blankFR31Count = Math.max(0, TOTAL_FR31_ROWS - fr31Items.length);
 
-  // Prepare items for FR 1-4 (34 dotted rows fixed height matching template)
+  // Prepare items for FR 1-4 (36 dotted rows fixed height matching template)
   // Each item gets a primary row and a dotted secondary row like the user's template
-  const TOTAL_FR14_ROWS = 34;
+  const TOTAL_FR14_ROWS = 36;
   const fr14Rows = useMemo(() => {
     const rows: {
       no: string;
@@ -374,23 +374,23 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* FORM 1: ฟอร์มการผลิต (FR 3-1) - หน้าตาตรงตามรูปที่ 1                       */}
+      {/* FORM 1: ฟอร์มการผลิต (FR 3-1) - หน้าตาตรงตามรูปที่ 1 เต็มแผ่น A4          */}
       {/* ========================================================================= */}
       {(activeTab === 'both' || activeTab === 'fr31') && (
-        <div className="print-page print-page-1 bg-white p-4 sm:p-6 text-black font-sans leading-tight">
-          {/* Main Outer Box with 1.5px Solid Black Border */}
-          <div className="border-[1.5px] border-black bg-white">
+        <div className="print-page print-page-1 bg-white p-4 sm:p-6 text-black font-sans leading-tight min-h-[283mm] print:p-0 print:m-0 print:w-full print:h-[283mm] print:max-h-[283mm] print:overflow-hidden print:flex print:flex-col print:justify-between shadow-md mb-8 rounded-lg print:shadow-none print:rounded-none">
+          {/* Main Outer Box with 1.5px Solid Black Border - Height 276mm fits full A4 page */}
+          <div className="border-[1.5px] border-black bg-white flex flex-col justify-between h-[276mm] max-h-[276mm] print:h-[276mm]">
             {/* Gray Header Banner */}
-            <div className="bg-[#e5e5e5] py-1.5 text-center border-b border-black">
+            <div className="bg-[#e5e5e5] h-[9mm] flex items-center justify-center border-b border-black shrink-0">
               <h1 className="text-sm sm:text-base font-bold text-black tracking-wide">
                 ฟอร์มการผลิต (FR 3-1)
               </h1>
             </div>
 
             {/* Meta Section (3 Rows) */}
-            <div className="text-[11px] sm:text-xs text-black">
+            <div className="text-[11px] sm:text-xs text-black shrink-0">
               {/* Row 1: วันที่ผลิต & เลขที่ (dotted bottom divider) */}
-              <div className="flex border-b border-dotted border-black px-2 py-1 items-center justify-between">
+              <div className="h-[7.5mm] flex border-b border-dotted border-black px-2 items-center justify-between">
                 <div className="flex items-center">
                   <span className="font-bold mr-1.5">วันที่ผลิต :</span>
                   <span>{prodDate}</span>
@@ -402,7 +402,7 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
 
               {/* Row 2: รายการผลิต & รุ่นการผลิต (dotted bottom divider) */}
-              <div className="flex border-b border-dotted border-black px-2 py-1 items-center justify-between">
+              <div className="h-[7.5mm] flex border-b border-dotted border-black px-2 items-center justify-between">
                 <div className="flex items-center">
                   <span className="font-bold mr-1.5">รายการผลิต :</span>
                   <span className="font-semibold">{productName}</span>
@@ -414,7 +414,7 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
 
               {/* Row 3: วิธีปฏิบัติงาน & Revision (solid bottom divider) */}
-              <div className="flex border-b border-black px-2 py-1 items-center justify-between">
+              <div className="h-[7.5mm] flex border-b border-black px-2 items-center justify-between">
                 <div className="flex items-center">
                   <span className="font-bold mr-1.5">วิธีปฏิบัติงาน :</span>
                   <span>{workInstruction}</span>
@@ -426,92 +426,99 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
             </div>
 
-            {/* BOM Table */}
-            <table className="w-full text-[11px] sm:text-xs border-collapse border-b border-black">
+            {/* BOM Table - 22 rows distributed evenly to fill ~180mm */}
+            <table className="w-full text-[11px] sm:text-xs border-collapse border-b border-black table-fixed flex-1">
               <thead>
-                <tr className="bg-[#e5e5e5] text-black font-bold border-b border-black text-center">
-                  <th className="w-12 py-1 px-1.5 border-r border-black font-bold">ลำดับ</th>
-                  <th className="py-1 px-3 border-r border-black text-center font-bold">รายการ</th>
-                  <th className="w-36 sm:w-44 py-1 px-2 border-r border-black text-center font-bold">
+                <tr className="bg-[#e5e5e5] text-black font-bold border-b border-black text-center h-[8.5mm]">
+                  <th className="w-12 border-r border-black font-bold align-middle">ลำดับ</th>
+                  <th className="border-r border-black text-center font-bold align-middle">รายการ</th>
+                  <th className="w-36 sm:w-44 border-r border-black text-center font-bold align-middle">
                     จำนวน/หน่วยนับ
                   </th>
-                  <th className="w-32 sm:w-40 py-1 px-2 text-center font-bold">หมายเหตุ</th>
+                  <th className="w-32 sm:w-40 text-center font-bold align-middle">หมายเหตุ</th>
                 </tr>
               </thead>
               <tbody>
                 {fr31Items.map((item, idx) => {
                   const isSub = item.no.includes('.');
                   return (
-                    <tr key={`fr31-row-${idx}`} className="border-b border-black h-[18px]">
-                      <td className="py-0.5 px-1.5 border-r border-black text-center font-mono font-medium">
-                        {item.no}
+                    <tr key={`fr31-row-${idx}`} className="border-b border-black h-[8.18mm] text-center" style={{ height: '8.18mm' }}>
+                      <td className="border-r border-black text-center font-mono font-medium align-middle px-1">
+                        {item.no || '\u00A0'}
                       </td>
-                      <td className={`py-0.5 px-3 border-r border-black ${isSub ? 'pl-6' : ''}`}>
-                        {item.name}
+                      <td className={`border-r border-black align-middle text-left px-3 ${isSub ? 'pl-6' : ''}`}>
+                        {item.name || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-2 border-r border-black text-center font-medium">
-                        {item.qty}
+                      <td className="border-r border-black text-center font-medium align-middle px-2">
+                        {item.qty || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-2 text-center text-slate-700">{item.notes}</td>
+                      <td className="text-center text-slate-700 align-middle px-2">
+                        {item.notes || '\u00A0'}
+                      </td>
                     </tr>
                   );
                 })}
 
                 {/* Blank rows filling exactly up to 22 rows like template */}
                 {Array.from({ length: blankFR31Count }).map((_, idx) => (
-                  <tr key={`fr31-blank-${idx}`} className="border-b border-black h-[18px]">
-                    <td className="py-0.5 px-1.5 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-3 border-r border-black"></td>
-                    <td className="py-0.5 px-2 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-2 text-center"></td>
+                  <tr key={`fr31-blank-${idx}`} className="border-b border-black h-[8.18mm]" style={{ height: '8.18mm' }}>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="border-r border-black align-middle">&nbsp;</td>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="text-center align-middle">&nbsp;</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* Bottom Split Section (Packaging Specs & Label Info) */}
-            <div className="flex border-b border-black text-[11px] sm:text-xs">
+            {/* Bottom Split Section (Packaging Specs & Label Info - 4 rows x 6.5mm = 26mm) */}
+            <div className="flex border-b border-black text-[11px] sm:text-xs shrink-0">
               {/* Left Column (Packaging Specs, ~70%) */}
               <div className="w-[70%] border-r border-black divide-y divide-black">
-                <div className="px-2 py-1 flex items-center">
+                <div className="h-[6.5mm] px-2 flex items-center">
                   <span className="font-bold w-28 shrink-0">จำนวนที่ผลิต :</span>
                   <span>{totalProduced}</span>
                 </div>
-                <div className="px-2 py-1 flex items-center">
+                <div className="h-[6.5mm] px-2 flex items-center">
                   <span className="font-bold w-28 shrink-0">ขนาดการบรรจุ  :</span>
                   <span>{packSize}</span>
                 </div>
-                <div className="px-2 py-1 flex items-center">
+                <div className="h-[6.5mm] px-2 flex items-center">
                   <span className="font-bold w-28 shrink-0">ชนิดบรรจุภัณฑ์ :</span>
                   <span>{packagingType}</span>
+                </div>
+                <div className="h-[6.5mm] px-2 flex items-center">
+                  <span>&nbsp;</span>
                 </div>
               </div>
 
               {/* Right Column (Label Info, ~30%) */}
               <div className="w-[30%] divide-y divide-black">
-                <div className="bg-[#e5e5e5] py-0.5 text-center font-bold">การระบุฉลาก</div>
-                <div className="flex">
-                  <span className="w-16 px-1.5 py-0.5 font-bold border-r border-black shrink-0">LOT. :</span>
-                  <span className="px-1.5 py-0.5 font-mono font-bold flex-1">{lotNo}</span>
+                <div className="h-[6.5mm] bg-[#e5e5e5] flex items-center justify-center font-bold">
+                  การระบุฉลาก
                 </div>
-                <div className="flex">
-                  <span className="w-16 px-1.5 py-0.5 font-bold border-r border-black shrink-0 underline text-blue-700">
+                <div className="h-[6.5mm] flex items-center">
+                  <span className="w-16 px-1.5 font-bold border-r border-black shrink-0">LOT. :</span>
+                  <span className="px-1.5 font-mono font-bold flex-1">{lotNo}</span>
+                </div>
+                <div className="h-[6.5mm] flex items-center">
+                  <span className="w-16 px-1.5 font-bold border-r border-black shrink-0 underline text-blue-700">
                     MFD. :
                   </span>
-                  <span className="px-1.5 py-0.5 font-mono flex-1">{mfdDate}</span>
+                  <span className="px-1.5 font-mono flex-1">{mfdDate}</span>
                 </div>
-                <div className="flex">
-                  <span className="w-16 px-1.5 py-0.5 font-bold border-r border-black shrink-0 underline text-blue-700">
+                <div className="h-[6.5mm] flex items-center">
+                  <span className="w-16 px-1.5 font-bold border-r border-black shrink-0 underline text-blue-700">
                     EXP. :
                   </span>
-                  <span className="px-1.5 py-0.5 font-mono flex-1">{expDate}</span>
+                  <span className="px-1.5 font-mono flex-1">{expDate}</span>
                 </div>
               </div>
             </div>
 
-            {/* Signatures Section */}
-            <div className="py-4 px-4 text-[11px] sm:text-xs">
-              <div className="grid grid-cols-2 gap-4">
+            {/* Signatures Section - Height 26mm */}
+            <div className="h-[26mm] shrink-0 px-4 flex items-center text-[11px] sm:text-xs">
+              <div className="grid grid-cols-2 gap-4 w-full">
                 {/* Left: ผู้จัดทำ */}
                 <div className="space-y-1 text-center">
                   <p>ผู้จัดทำ  : ..................................................</p>
@@ -532,12 +539,12 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
             </div>
 
-            {/* Bottom Gray Footer Strip (matches template) */}
-            <div className="h-3.5 bg-[#e5e5e5] border-t border-black"></div>
+            {/* Bottom Gray Footer Strip (matches template - Height 3.5mm) */}
+            <div className="h-[3.5mm] shrink-0 bg-[#e5e5e5] border-t border-black"></div>
           </div>
 
-          {/* Document Reference Footer outside border */}
-          <div className="pt-1 text-right text-[10px] text-black font-mono">
+          {/* Document Reference Footer outside border - Height 5mm */}
+          <div className="h-[5mm] shrink-0 pt-1 text-right text-[10px] text-black font-mono">
             <span>FR 3-<span className="underline">1 : 2</span> : 01/11/60</span>
           </div>
         </div>
@@ -555,23 +562,23 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
       )}
 
       {/* ========================================================================= */}
-      {/* FORM 2: ฟอร์มเบิก-จ่าย (FR 1-4) - หน้าตาตรงตามรูปที่ 2                      */}
+      {/* FORM 2: ฟอร์มเบิก-จ่าย (FR 1-4) - หน้าตาตรงตามรูปที่ 2 เต็มแผ่น A4         */}
       {/* ========================================================================= */}
       {(activeTab === 'both' || activeTab === 'fr14') && (
-        <div className="print-page print-page-2 bg-white p-4 sm:p-6 text-black font-sans leading-tight">
-          {/* Main Outer Box with 1.5px Solid Black Border */}
-          <div className="border-[1.5px] border-black bg-white">
+        <div className="print-page print-page-2 bg-white p-4 sm:p-6 text-black font-sans leading-tight min-h-[283mm] print:p-0 print:m-0 print:w-full print:h-[283mm] print:max-h-[283mm] print:overflow-hidden print:flex print:flex-col print:justify-between shadow-md mb-8 rounded-lg print:shadow-none print:rounded-none">
+          {/* Main Outer Box with 1.5px Solid Black Border - Height 276mm fits full A4 page */}
+          <div className="border-[1.5px] border-black bg-white flex flex-col justify-between h-[276mm] max-h-[276mm] print:h-[276mm]">
             {/* Gray Header Banner */}
-            <div className="bg-[#e5e5e5] py-1.5 text-center border-b border-black">
+            <div className="bg-[#e5e5e5] h-[9mm] flex items-center justify-center border-b border-black shrink-0">
               <h1 className="text-sm sm:text-base font-bold text-black tracking-wide">
                 ฟอร์มเบิก-จ่าย (FR 1-4)
               </h1>
             </div>
 
             {/* Meta Section (2 Rows) */}
-            <div className="text-[11px] sm:text-xs text-black">
+            <div className="text-[11px] sm:text-xs text-black shrink-0">
               {/* Row 1: วัน/เดือน/ปี & เลขที่ (dotted bottom divider) */}
-              <div className="flex border-b border-dotted border-black px-2 py-1 items-center justify-between">
+              <div className="h-[7.5mm] flex border-b border-dotted border-black px-2 items-center justify-between">
                 <div className="flex items-center">
                   <span className="font-bold mr-1.5">วัน/เดือน/ปี  :</span>
                   <span>{prodDate}</span>
@@ -583,7 +590,7 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
 
               {/* Row 2: การเบิกวัตถุดิบเพื่อการผลิต, รุ่นการผลิต, เลขที่การผลิต (solid bottom divider) */}
-              <div className="flex flex-wrap items-center justify-between border-b border-black px-2 py-1 gap-y-1">
+              <div className="h-[8.5mm] flex flex-wrap items-center justify-between border-b border-black px-2 gap-y-1">
                 <div className="flex items-center">
                   <span className="font-bold mr-1.5">การเบิกวัตถุดิบเพื่อการผลิต :</span>
                   <span className="font-semibold">{productName}</span>
@@ -599,35 +606,35 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
               </div>
             </div>
 
-            {/* Table of Requisition & Issuance (Dotted inner horizontal lines matching template) */}
-            <table className="w-full text-[11px] sm:text-xs border-collapse border-b border-black">
+            {/* Table of Requisition & Issuance (36 rows x 5.85mm = 210.6mm) */}
+            <table className="w-full text-[11px] sm:text-xs border-collapse border-b border-black table-fixed flex-1">
               <thead>
                 {/* Level 1 Group Header */}
-                <tr className="border-b border-black text-center font-bold">
-                  <th colSpan={3} className="py-1 px-2 border-r border-black">
+                <tr className="border-b border-black text-center font-bold h-[6.5mm]">
+                  <th colSpan={3} className="border-r border-black align-middle">
                     รายการเบิก
                   </th>
-                  <th colSpan={3} className="py-1 px-2">
+                  <th colSpan={3} className="align-middle">
                     รายการจ่าย
                   </th>
                 </tr>
 
                 {/* Level 2 Column Headers */}
-                <tr className="border-b border-black text-center font-bold">
-                  <th className="w-10 py-1 px-1 border-r border-black font-bold">ลำดับ</th>
-                  <th className="py-1 px-2 border-r border-black text-center font-bold">ชื่อวัตถุดิบ</th>
-                  <th className="w-20 sm:w-24 py-1 px-1 border-r border-black text-center font-bold">
+                <tr className="border-b border-black text-center font-bold h-[9mm]">
+                  <th className="w-10 border-r border-black font-bold align-middle">ลำดับ</th>
+                  <th className="border-r border-black text-center font-bold align-middle">ชื่อวัตถุดิบ</th>
+                  <th className="w-20 sm:w-24 border-r border-black text-center font-bold align-middle">
                     จำนวนเบิก
                   </th>
-                  <th className="w-24 sm:w-28 py-1 px-1 border-r border-black text-center font-bold leading-tight">
+                  <th className="w-24 sm:w-28 border-r border-black text-center font-bold align-middle leading-tight">
                     วัตถุดิบ
                     <br />
                     Lot No.
                   </th>
-                  <th className="w-20 sm:w-24 py-1 px-1 border-r border-black text-center font-bold">
+                  <th className="w-20 sm:w-24 border-r border-black text-center font-bold align-middle">
                     จำนวนจ่าย
                   </th>
-                  <th className="w-32 sm:w-40 py-1 px-1 text-center font-bold leading-tight">
+                  <th className="w-32 sm:w-40 text-center font-bold align-middle leading-tight">
                     ใช้งานเครื่องชั่ง
                     <br />
                     <span className="underline text-blue-700 font-bold">(PD-BLA-.......)</span>
@@ -640,49 +647,51 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
                   return (
                     <tr
                       key={`fr14-row-${idx}`}
-                      className="border-b border-dotted border-black h-[16px]"
+                      className="border-b border-dotted border-black h-[5.85mm]"
+                      style={{ height: '5.85mm' }}
                     >
-                      <td className="py-0.5 px-1 border-r border-black text-center font-mono">
-                        {row.no}
+                      <td className="border-r border-black text-center font-mono align-middle px-1">
+                        {row.no || '\u00A0'}
                       </td>
-                      <td className={`py-0.5 px-2 border-r border-black ${isSub ? 'pl-5' : ''}`}>
-                        {row.name}
+                      <td className={`border-r border-black align-middle text-left px-2 ${isSub ? 'pl-5' : ''}`}>
+                        {row.name || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-1 border-r border-black text-center font-medium">
-                        {row.reqQty}
+                      <td className="border-r border-black text-center font-medium align-middle px-1">
+                        {row.reqQty || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-1 border-r border-black text-center font-mono font-bold">
-                        {row.lotNo}
+                      <td className="border-r border-black text-center font-mono font-bold align-middle px-1">
+                        {row.lotNo || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-1 border-r border-black text-center font-bold">
-                        {row.issueQty}
+                      <td className="border-r border-black text-center font-bold align-middle px-1">
+                        {row.issueQty || '\u00A0'}
                       </td>
-                      <td className="py-0.5 px-1 text-center font-mono text-[10px]">
-                        {row.scale}
+                      <td className="text-center font-mono text-[10px] align-middle px-1">
+                        {row.scale || '\u00A0'}
                       </td>
                     </tr>
                   );
                 })}
 
-                {/* Blank dotted rows filling up to 34 rows matching template */}
+                {/* Blank dotted rows filling up to 36 rows matching template */}
                 {Array.from({ length: blankFR14Count }).map((_, idx) => (
                   <tr
                     key={`fr14-blank-${idx}`}
-                    className="border-b border-dotted border-black h-[16px]"
+                    className="border-b border-dotted border-black h-[5.85mm]"
+                    style={{ height: '5.85mm' }}
                   >
-                    <td className="py-0.5 px-1 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-2 border-r border-black"></td>
-                    <td className="py-0.5 px-1 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-1 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-1 border-r border-black text-center"></td>
-                    <td className="py-0.5 px-1 text-center"></td>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="border-r border-black align-middle">&nbsp;</td>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="border-r border-black text-center align-middle">&nbsp;</td>
+                    <td className="text-center align-middle">&nbsp;</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* Signatures Section (3 Columns with vertical dividers) */}
-            <div className="grid grid-cols-3 divide-x divide-black text-[11px] sm:text-xs">
+            {/* Signatures Section (3 Columns with vertical dividers - Height 25mm) */}
+            <div className="h-[25mm] shrink-0 grid grid-cols-3 divide-x divide-black text-[11px] sm:text-xs border-t border-black">
               {/* Col 1: ผู้เบิกและตรวจสอบ */}
               <div className="p-2 py-3 space-y-1">
                 <p>ผู้เบิกและตรวจสอบ : ....................................</p>
@@ -709,8 +718,8 @@ export default function ProductionPrintSheets({ order }: { order: OrderData }) {
             </div>
           </div>
 
-          {/* Document Reference Footer outside border */}
-          <div className="pt-1 text-right text-[10px] text-black font-mono">
+          {/* Document Reference Footer outside border - Height 5mm */}
+          <div className="h-[5mm] shrink-0 pt-1 text-right text-[10px] text-black font-mono">
             <span>FR 1-<span className="underline">4 : 5</span> : 01/05/67</span>
           </div>
         </div>
