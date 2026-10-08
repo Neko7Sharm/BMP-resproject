@@ -170,14 +170,32 @@ export default function RecipesPage() {
   }
 
   function handleAddRecipeRow() {
-    if (materials.length === 0) return;
-    const defaultUnit = isLiquidUnit(materials[0].baseUnit) ? 'L' : 'kg';
+    if (materials.length > 0) {
+      const defaultUnit = isLiquidUnit(materials[0].baseUnit) ? 'L' : 'kg';
+      setRecipeRows([
+        ...recipeRows,
+        {
+          materialId: materials[0].id,
+          quantityRequired: 0.05,
+          unit: defaultUnit,
+        },
+      ]);
+    } else {
+      handleAddCustomRecipeRow();
+    }
+  }
+
+  function handleAddCustomRecipeRow() {
     setRecipeRows([
       ...recipeRows,
       {
-        materialId: materials[0].id,
+        materialId: '__NEW__',
         quantityRequired: 0.05,
-        unit: defaultUnit,
+        unit: 'kg',
+        isCustom: true,
+        customCode: '',
+        customName: '',
+        customBaseUnit: 'kg',
       },
     ]);
   }
@@ -608,13 +626,23 @@ export default function RecipesPage() {
                       ของแข็งเลือก <strong>kg หรือ g</strong> • ของเหลวเลือก <strong>L หรือ ml</strong> ได้ทันที
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAddRecipeRow}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-50 transition"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> เพิ่มวัตถุดิบ
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleAddCustomRecipeRow}
+                      className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg transition"
+                      title="เพิ่มวัตถุดิบที่ยังไม่มีในคลัง"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-amber-600" /> วัตถุดิบใหม่ (อื่นๆ)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddRecipeRow}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> เพิ่มวัตถุดิบในคลัง
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
