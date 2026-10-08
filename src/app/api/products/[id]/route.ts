@@ -75,8 +75,8 @@ export async function PUT(
       });
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Product',
       recordId: params.id,
       action: 'UPDATE',
@@ -84,7 +84,7 @@ export async function PUT(
       oldData: oldRecord,
       newData: updated,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(updated);
   } catch (error: any) {
@@ -131,8 +131,8 @@ export async function DELETE(
       });
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Product',
       recordId: params.id,
       action: 'DELETE',
@@ -140,7 +140,7 @@ export async function DELETE(
       oldData: oldRecord,
       newData: null,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

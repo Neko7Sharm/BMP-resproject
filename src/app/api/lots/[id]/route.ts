@@ -33,8 +33,8 @@ export async function PUT(
       include: { material: true },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'MaterialLot',
       recordId: params.id,
       action: 'UPDATE',
@@ -42,7 +42,7 @@ export async function PUT(
       oldData: oldRecord,
       newData: updatedLot,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(updatedLot);
   } catch (error: any) {
@@ -79,8 +79,8 @@ export async function DELETE(
       });
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'MaterialLot',
       recordId: lotId,
       action: 'DELETE',
@@ -88,7 +88,7 @@ export async function DELETE(
       oldData: oldRecord,
       newData: null,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json({ success: true, message: 'ลบล็อตนี้เรียบร้อยแล้ว' });
   } catch (error: any) {

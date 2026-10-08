@@ -50,15 +50,15 @@ export async function POST(request: Request) {
       },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Section',
       recordId: section.id,
       action: 'CREATE',
       summary: `เพิ่มโซนคลังใหม่: ${section.code} - ${section.name}`,
       newData: section,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(section, { status: 201 });
   } catch (error: any) {

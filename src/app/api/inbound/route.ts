@@ -41,6 +41,9 @@ export async function POST(request: Request) {
           costPerUnit: costPerUnit ? Number(costPerUnit) : 0,
           status: 'ACTIVE',
         },
+        include: {
+          material: true,
+        },
       });
 
       // 2. Create StockTransaction
@@ -61,15 +64,16 @@ export async function POST(request: Request) {
       return { lot, transaction };
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    const matName = result.lot.material ? `[${result.lot.material.code}] ${result.lot.material.name}` : `(ID: ${materialId})`;
+    await recordAuditLog({
       tableName: 'MaterialLot',
       recordId: result.lot.id,
       action: 'CREATE',
-      summary: `รับวัตถุดิบเข้า: ล็อต ${result.lot.lotNumber} จำนวน ${qty} หน่วย (materialId: ${materialId})`,
+      summary: `รับวัตถุดิบเข้า: ${matName} ล็อต ${result.lot.lotNumber} จำนวน ${qty} ${result.lot.material?.baseUnit || 'หน่วย'}`,
       newData: { lot: result.lot, transaction: result.transaction },
       changedBy: createdBy || 'เจ้าหน้าที่รับของ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {

@@ -583,8 +583,8 @@ export async function POST(request: Request) {
         };
       });
 
-      // Write consolidated Audit Log for this entire stock card batch
-      recordAuditLog({
+      // Write consolidated Audit Log for this entire stock card batch (awaited)
+      await recordAuditLog({
         tableName: 'StockCardImport',
         recordId: result.materialId,
         action: 'IMPORT',
@@ -600,7 +600,7 @@ export async function POST(request: Request) {
           totalRows: rows.length,
         },
         changedBy: creator || 'ระบบนำเข้า OCR',
-      }).catch(() => {});
+      });
 
       return NextResponse.json({ success: true, ...result });
     }

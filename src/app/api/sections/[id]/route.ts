@@ -59,8 +59,8 @@ export async function PUT(
       },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Section',
       recordId: params.id,
       action: 'UPDATE',
@@ -68,7 +68,7 @@ export async function PUT(
       oldData: oldRecord,
       newData: updated,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(updated);
   } catch (error: any) {
@@ -101,8 +101,8 @@ export async function DELETE(
       where: { id: params.id },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Section',
       recordId: params.id,
       action: 'DELETE',
@@ -110,7 +110,7 @@ export async function DELETE(
       oldData: oldRecord,
       newData: null,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json({ success: true, message: 'ลบโซนคลังเรียบร้อยแล้ว' });
   } catch (error: any) {

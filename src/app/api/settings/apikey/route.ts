@@ -43,15 +43,15 @@ export async function POST(request: Request) {
       create: { key: SHARED_KEY_SETTING, value: key },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'AppSetting',
       recordId: SHARED_KEY_SETTING,
       action: 'UPDATE',
       summary: `อัปเดต Gemini API Key กลาง (${maskKey(key)})`,
       newData: { key: SHARED_KEY_SETTING, maskedKey: maskKey(key) },
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json({
       success: true,
@@ -68,8 +68,8 @@ export async function DELETE() {
   try {
     await prisma.appSetting.deleteMany({ where: { key: SHARED_KEY_SETTING } });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'AppSetting',
       recordId: SHARED_KEY_SETTING,
       action: 'DELETE',
@@ -77,7 +77,7 @@ export async function DELETE() {
       oldData: { key: SHARED_KEY_SETTING },
       newData: null,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

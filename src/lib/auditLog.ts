@@ -15,6 +15,20 @@ export interface AuditLogOptions {
   coalesceWindowMs?: number;
 }
 
+function safeJSON(val: any): string | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val === 'string') return val;
+  try {
+    return JSON.stringify(val);
+  } catch {
+    try {
+      return JSON.stringify(val, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+    } catch {
+      return String(val);
+    }
+  }
+}
+
 /**
  * บันทึกประวัติการเปลี่ยนแปลงข้อมูลลงในตาราง AuditLog
  * หากมาจากที่เดียวกันและเวลาใกล้เคียงกัน (ภายใน coalesceWindowMs) จะรวมเป็นรายการเดียวอัตโนมัติ
@@ -32,16 +46,11 @@ export async function recordAuditLog(options: AuditLogOptions) {
       coalesceWindowMs = 10000,
     } = options;
 
-    const oldDataStr = oldData !== undefined && oldData !== null
-      ? (typeof oldData === 'string' ? oldData : JSON.stringify(oldData))
-      : null;
+    const oldDataStr = safeJSON(oldData);
+    const newDataStr = safeJSON(newData);
 
-    const newDataStr = newData !== undefined && newData !== null
-      ? (typeof newData === 'string' ? newData : JSON.stringify(newData))
-      : null;
-
-    // หากเปิด coalesceWindowMs และไม่ใช่การ DELETE ให้ตรวจสอบรายการล่าสุดที่ตรงกัน
-    if (coalesceWindowMs > 0 && action !== 'DELETE') {
+    // หากเปิด coalesceWindowMs สำหรับ UPDATE: รวมเข้ากับรายการล่าสุดที่ยังอยู่ในช่วงเวลา
+    if (coalesceWindowMs > 0 && action === 'UPDATE') {
       const windowStart = new Date(Date.now() - coalesceWindowMs);
       const recentLog = await prisma.auditLog.findFirst({
         where: {
@@ -55,7 +64,7 @@ export async function recordAuditLog(options: AuditLogOptions) {
       });
 
       if (recentLog) {
-        // รวมรายการ (Coalesce): รวม summary และอัปเดต newData ล่าสุด
+        // รวมรายการ (Coalesce): อัปเดต summary และ newData ล่าสุด พร้อมอัปเดต createdAt ให้ขึ้นแถวบนสุด
         let mergedSummary = recentLog.summary || '';
         if (summary && !mergedSummary.includes(summary)) {
           mergedSummary = `${mergedSummary} | ${summary}`;
@@ -66,8 +75,8 @@ export async function recordAuditLog(options: AuditLogOptions) {
           data: {
             summary: mergedSummary.slice(0, 500),
             newData: newDataStr || recentLog.newData,
-            // คงค่า oldData ดั้งเดิมก่อนการแก้ไขชุดนี้ไว้
             oldData: recentLog.oldData || oldDataStr,
+            createdAt: new Date(),
           },
         });
       }
@@ -86,7 +95,7 @@ export async function recordAuditLog(options: AuditLogOptions) {
       },
     });
   } catch (error) {
-    console.warn('Failed to record audit log:', error);
+    console.error('Failed to record audit log:', error);
     return null;
   }
 }

@@ -55,15 +55,15 @@ export async function POST(
         effectiveDate
       );
 
-      // Write Audit Log (non-blocking)
-      recordAuditLog({
+      // Write Audit Log (awaited)
+      await recordAuditLog({
         tableName: 'ProductionOrder',
         recordId: params.id,
         action: 'UPDATE',
         summary: `ตัดสต็อกเบิกผลิต: คำสั่งผลิต ${updated.orderNo} (${updated.product?.name || ''}) ตัดวัตถุดิบ ${allocations?.length || 0} ล็อต`,
         newData: updated,
         changedBy: issuerName || 'เจ้าหน้าที่เบิกจ่าย',
-      }).catch(() => {});
+      });
 
       return NextResponse.json(updated);
     }

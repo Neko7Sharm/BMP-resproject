@@ -103,15 +103,15 @@ export async function POST(request: Request) {
       },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Material',
       recordId: material.id,
       action: 'CREATE',
       summary: `เพิ่มวัตถุดิบใหม่: ${material.code} - ${material.name}`,
       newData: material,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(material, { status: 201 });
   } catch (error: any) {

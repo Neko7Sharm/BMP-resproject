@@ -54,15 +54,15 @@ export async function POST(request: Request) {
       },
     });
 
-    // Write Audit Log (non-blocking)
-    recordAuditLog({
+    // Write Audit Log (awaited)
+    await recordAuditLog({
       tableName: 'Product',
       recordId: product.id,
       action: 'CREATE',
       summary: `สร้างสูตรสินค้าใหม่: ${product.code} - ${product.name} (สูตรผลิต ${(recipeItems || []).length} รายการ)`,
       newData: product,
       changedBy: 'ผู้ใช้งานระบบ',
-    }).catch(() => {});
+    });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
