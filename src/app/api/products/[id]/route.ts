@@ -14,6 +14,7 @@ export async function GET(
             material: true,
           },
         },
+        outputSection: true,
       },
     });
 
@@ -33,7 +34,7 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { code, name, unit, description, recipeItems } = body;
+    const { code, name, unit, description, recipeItems, outputSectionId } = body;
 
     const oldRecord = await prisma.product.findUnique({
       where: { id: params.id },
@@ -54,6 +55,7 @@ export async function PUT(
           name,
           unit: unit || 'ชิ้น',
           description,
+          outputSectionId: outputSectionId || null,
           recipeItems: {
             create: (recipeItems || []).map((item: any) => ({
               materialId: item.materialId,
@@ -67,6 +69,7 @@ export async function PUT(
           recipeItems: {
             include: { material: true },
           },
+          outputSection: true,
         },
       });
     });

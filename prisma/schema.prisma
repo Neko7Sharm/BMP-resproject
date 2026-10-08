@@ -8,13 +8,14 @@ generator client {
 }
 
 model Section {
-  id          String     @id @default(cuid())
-  code        String     @unique
-  name        String
-  description String?
-  materials   Material[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  code           String     @unique
+  name           String
+  description    String?
+  materials      Material[]
+  outputProducts Product[]  @relation("ProductOutputSection")
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 model Material {
@@ -73,6 +74,8 @@ model Product {
   name             String
   unit             String            @default("ชิ้น")
   description      String?
+  outputSectionId  String?
+  outputSection    Section?          @relation("ProductOutputSection", fields: [outputSectionId], references: [id])
   recipeItems      RecipeItem[]
   productionOrders ProductionOrder[]
   createdAt        DateTime          @default(now())

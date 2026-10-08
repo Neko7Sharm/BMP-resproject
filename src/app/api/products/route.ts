@@ -10,6 +10,7 @@ export async function GET() {
             material: true,
           },
         },
+        outputSection: true,
       },
       orderBy: { code: 'asc' },
     });
@@ -22,7 +23,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, name, unit, description, recipeItems } = body;
+    const { code, name, unit, description, recipeItems, outputSectionId } = body;
 
     if (!code || !name) {
       return NextResponse.json({ error: 'กรุณากรอกรหัสและชื่อสินค้า' }, { status: 400 });
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
         name,
         unit: unit || 'ชิ้น',
         description,
+        outputSectionId: outputSectionId || null,
         recipeItems: {
           create: (recipeItems || []).map((item: any) => ({
             materialId: item.materialId,
@@ -47,6 +49,7 @@ export async function POST(request: Request) {
         recipeItems: {
           include: { material: true },
         },
+        outputSection: true,
       },
     });
 
