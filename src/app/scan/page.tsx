@@ -64,6 +64,13 @@ export default function ScanPage() {
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [isDragging, setIsDragging]   = useState(false);
   const [hasApiKey, setHasApiKey]     = useState<boolean | null>(null);
+  const [systemKeyAvailable, setSystemKeyAvailable] = useState(false);
+  const [sharedKeyAvailable, setSharedKeyAvailable] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [keyModalReason, setKeyModalReason] = useState('');
+  const [keyInput, setKeyInput] = useState('');
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [isSavingKey, setIsSavingKey] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [analyzeStepText, setAnalyzeStepText] = useState('');
 
@@ -75,7 +82,11 @@ export default function ScanPage() {
     fetch('/api/materials').then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : [])).catch(() => {});
     fetch('/api/ai/ocr-stock-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'CHECK_KEY' }) })
       .then(r => r.json())
-      .then(d => setHasApiKey(d.hasApiKey === true))
+      .then(d => {
+        setHasApiKey(d.hasApiKey === true);
+        setSystemKeyAvailable(d.systemKeyAvailable === true);
+        setSharedKeyAvailable(d.sharedKeyAvailable === true);
+      })
       .catch(() => setHasApiKey(false));
   }, []);
 
@@ -147,6 +158,49 @@ export default function ScanPage() {
     if (file) processFile(file);
   };
 
+  // ── Shared API Key (เก็บใน DB ใช้ร่วมกันทุกคน) ──
+  const openKeyModal = (reason: string) => {
+    setKeyModalReason(reason);
+    setKeyInput('');
+    setKeyError(null);
+    setShowKeyModal(true);
+  };
+
+  const refreshKeyStatus = () => {
+    fetch('/api/ai/ocr-stock-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'CHECK_KEY' }) })
+      .then(r => r.json())
+      .then(d => {
+        setHasApiKey(d.hasApiKey === true);
+        setSystemKeyAvailable(d.systemKeyAvailable === true);
+        setSharedKeyAvailable(d.sharedKeyAvailable === true);
+      })
+      .catch(() => setHasApiKey(false));
+  };
+
+  const handleSaveKeyAndRetry = async () => {
+    if (!keyInput.trim()) return;
+    setIsSavingKey(true);
+    setKeyError(null);
+    try {
+      const res = await fetch('/api/settings/apikey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: keyInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setKeyError(data.error || 'บันทึก API Key ไม่สำเร็จ'); return; }
+      setShowKeyModal(false);
+      setKeyInput('');
+      refreshKeyStatus();
+      // สแกนต่อทันทีด้วยรูปเดิม (ไม่ต้องอัปโหลดใหม่)
+      if (imageBase64) handleAnalyze();
+    } catch (e: any) {
+      setKeyError(e.message);
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
+
   // Analyze image via AI
   const handleAnalyze = async () => {
     if (!imageBase64) { setErrorMsg('กรุณาอัปโหลดรูปภาพก่อน'); return; }
@@ -187,6 +241,19 @@ export default function ScanPage() {
 
       if (!res.ok || !data.success) {
         setAnalyzeProgress(0);
+        setIsAnalyzing(false);
+        if (data.needsKey) {
+          // key ระบบใช้ไม่ได้ (ไม่มี/หมดโควตา/ผิด) → ขอ key กลางจากผู้ใช้ แล้วสแกนต่ออัตโนมัติ
+          refreshKeyStatus();
+          openKeyModal(
+            data.keySource === 'shared'
+              ? `${data.error} — ใส่ key ใหม่เพื่อใช้แทน key กลางเดิม`
+              : data.code === 'NO_KEY'
+                ? 'ยังไม่มี API Key ในระบบ กรุณาใส่ key เพื่อใช้งานการสแกน'
+                : `${data.error} — ใส่ key ของคุณเพื่อสแกนต่อ`
+          );
+          return;
+        }
         setErrorMsg(data.error || data.hint || 'AI วิเคราะห์ไม่สำเร็จ');
         return;
       }
@@ -439,19 +506,30 @@ export default function ScanPage() {
 
       {/* AI Status */}
       {hasApiKey === false && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-          <div className="text-sm text-rose-800">
-            <strong>ไม่พบ Gemini API Key</strong> — กรุณาตั้งค่า{' '}
-            <code className="bg-rose-100 px-1 rounded font-mono text-xs">GEMINI_API_KEY</code>{' '}
-            ใน Vercel Environment Variables เพื่อเปิดใช้งานระบบสแกน AI
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900 flex-1">
+            <strong>ยังไม่มี Gemini API Key ในระบบ</strong> — ใส่ key ครั้งเดียว ทุกคนที่ใช้งานจะใช้สแกนร่วมกันได้ทันที
           </div>
+          <button
+            onClick={() => openKeyModal('ยังไม่มี API Key ในระบบ กรุณาใส่ key เพื่อเปิดใช้งานการสแกน')}
+            className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition"
+          >
+            ใส่ API Key
+          </button>
         </div>
       )}
       {hasApiKey === true && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs text-emerald-800">
           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          <strong>Gemini AI พร้อมใช้งาน</strong> — ระบบจะวิเคราะห์ภาพจริงด้วย Google Gemini Vision
+          <strong>Gemini AI พร้อมใช้งาน</strong>
+          <span className="flex-1">— {sharedKeyAvailable && !systemKeyAvailable ? 'ใช้ API Key กลางที่ตั้งไว้ในระบบ' : 'ใช้ API ของระบบ'}</span>
+          <button
+            onClick={() => openKeyModal('เปลี่ยน API Key กลางที่ใช้ร่วมกันทุกคน')}
+            className="shrink-0 underline text-emerald-700 hover:text-emerald-900"
+          >
+            เปลี่ยน key
+          </button>
         </div>
       )}
 
@@ -931,6 +1009,56 @@ export default function ScanPage() {
           </div>
         )}
       </div>
+
+      {/* ── Modal: ใส่ Gemini API Key (ใช้ร่วมกันทุกคน เก็บใน DB) ── */}
+      {showKeyModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">ต้องใช้ Gemini API Key</h3>
+                <p className="text-xs text-amber-700 mt-1">{keyModalReason}</p>
+              </div>
+              <button onClick={() => setShowKeyModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800 mb-3">
+              ใส่ key ครั้งเดียว ระบบจะเก็บไว้ให้ <strong>ทุกคนที่ใช้งานเว็บนี้ใช้ร่วมกัน</strong> สร้าง key ฟรีได้ที่{' '}
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+                Google AI Studio
+              </a>
+            </div>
+
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="วาง Gemini API Key ที่นี่"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+            />
+            {keyError && <p className="text-xs text-rose-600 mt-2">{keyError}</p>}
+
+            <div className="flex gap-2.5 mt-4">
+              <button
+                onClick={() => setShowKeyModal(false)}
+                className="flex-1 px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleSaveKeyAndRetry}
+                disabled={isSavingKey || !keyInput.trim()}
+                className="flex-1 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-xl transition"
+              >
+                {isSavingKey ? 'กำลังตรวจสอบ...' : 'บันทึกและสแกนต่อ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

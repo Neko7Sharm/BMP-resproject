@@ -1,46 +1,62 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import prisma from '@/lib/prisma';
+import {
+  SHARED_KEY_SETTING,
+  getSystemKeys,
+  getSharedKey,
+  maskKey,
+  validateGeminiKey,
+} from '@/lib/geminiKeys';
 
-// GET: check current key status
+export const dynamic = 'force-dynamic';
+
+// GET: สถานะ key (ไม่คืนค่า key เต็ม)
 export async function GET() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const systemKeys = getSystemKeys();
+  const shared = await getSharedKey();
   return NextResponse.json({
-    hasApiKey: !!(apiKey && apiKey.trim() !== ''),
-    preview: apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : null,
+    hasApiKey: systemKeys.length > 0 || !!shared,
+    systemKeyAvailable: systemKeys.length > 0,
+    sharedKeyAvailable: !!shared,
+    preview: shared ? maskKey(shared) : null,
   });
 }
 
-// POST: save API key to .env.local
+// POST: ตรวจสอบแล้วบันทึก key กลางลง DB (ใช้ร่วมกันทุกคน)
 export async function POST(request: Request) {
   try {
     const { apiKey } = await request.json();
-    if (!apiKey || typeof apiKey !== 'string') {
+    if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
       return NextResponse.json({ error: 'กรุณาระบุ API Key' }, { status: 400 });
     }
+    const key = apiKey.trim();
 
-    const envPath = path.join(process.cwd(), '.env.local');
-    let content = '';
-    if (fs.existsSync(envPath)) {
-      content = fs.readFileSync(envPath, 'utf-8');
+    const check = await validateGeminiKey(key);
+    if (!check.valid) {
+      return NextResponse.json({ error: check.reason || 'API Key ไม่ถูกต้อง' }, { status: 400 });
     }
 
-    // Replace or add GEMINI_API_KEY line
-    const keyLine = `GEMINI_API_KEY=${apiKey.trim()}`;
-    if (content.match(/^GEMINI_API_KEY=.*/m)) {
-      content = content.replace(/^GEMINI_API_KEY=.*/m, keyLine);
-    } else {
-      content = content.trimEnd() + '\n' + keyLine + '\n';
-    }
+    await prisma.appSetting.upsert({
+      where: { key: SHARED_KEY_SETTING },
+      update: { value: key },
+      create: { key: SHARED_KEY_SETTING, value: key },
+    });
 
-    fs.writeFileSync(envPath, content, 'utf-8');
-
-    // Note: Next.js will pick up .env.local changes on next restart
     return NextResponse.json({
       success: true,
-      message: 'บันทึก API Key เรียบร้อยแล้ว กรุณาเริ่มต้นเซิร์ฟเวอร์ใหม่เพื่อให้ระบบอ่านค่า (npm run dev)',
-      preview: `${apiKey.trim().slice(0, 6)}...${apiKey.trim().slice(-4)}`,
+      message: 'บันทึก API Key กลางเรียบร้อยแล้ว ทุกคนที่ใช้ระบบจะใช้ key นี้สแกนได้ทันที',
+      preview: maskKey(key),
     });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// DELETE: ลบ key กลางออกจาก DB
+export async function DELETE() {
+  try {
+    await prisma.appSetting.deleteMany({ where: { key: SHARED_KEY_SETTING } });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

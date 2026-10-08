@@ -1,28 +1,40 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
 import prisma from '@/lib/prisma';
+import { getAllKeys, GeminiKeyEntry } from '@/lib/geminiKeys';
 
-// ---- AI Analysis Helper with Multi-API-Key & Multi-Model Fallback ----
-async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Promise<any> {
-  // Collect all available API keys from environment variables
-  const apiKeys: string[] = [];
-  const primaryKey = process.env.GEMINI_API_KEY;
-  if (primaryKey && primaryKey.trim() !== '') apiKeys.push(primaryKey.trim());
-  // Additional fallback keys: GEMINI_API_KEY_2, GEMINI_API_KEY_3, ...
-  for (let i = 2; i <= 10; i++) {
-    const extraKey = process.env[`GEMINI_API_KEY_${i}`];
-    if (extraKey && extraKey.trim() !== '') apiKeys.push(extraKey.trim());
+// วิเคราะห์ภาพใช้เวลานาน — กัน Vercel ตัดตอนกลางคัน
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
+// Error แบบมีชนิด เพื่อให้หน้าเว็บรู้ว่าต้องขอ API Key หรือไม่
+class AIError extends Error {
+  code: string;
+  needsKey: boolean;
+  keySource?: 'system' | 'shared';
+  constructor(code: string, message: string, needsKey: boolean, keySource?: 'system' | 'shared') {
+    super(message);
+    this.code = code;
+    this.needsKey = needsKey;
+    this.keySource = keySource;
   }
+}
 
+// ---- AI Analysis Helper: key ระบบก่อน → key กลางใน DB, พร้อม Multi-Model Fallback ----
+async function analyzeImageWithGemini(
+  imageBase64: string,
+  mimeType: string,
+  apiKeys: GeminiKeyEntry[]
+): Promise<any> {
   if (apiKeys.length === 0) {
-    return { success: false, reason: 'NO_API_KEY' };
+    throw new AIError('NO_KEY', 'ยังไม่มี Gemini API Key ในระบบ', true);
   }
 
-  // List of vision-capable models verified to work with your API key
+  // โมเดล vision ที่ใช้งานได้ (ตรวจสอบแล้ว) — รุ่น 1.5/2.0/2.5 ถูกยกเลิกแล้ว
   const candidateModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
   ];
 
   const prompt = `คุณเป็นผู้เชี่ยวชาญอ่านเอกสารใบสต็อกการ์ดคลังสินค้า (Stock Card / FR 1-6) ลายมือภาษาไทยและตัวเลข
@@ -76,14 +88,16 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
   const imagePart = { inlineData: { data: cleanBase64, mimeType: mimeType || 'image/jpeg' } };
 
   let lastError: any = null;
+  const failures: { source: 'system' | 'shared'; kind: 'quota' | 'invalid' }[] = [];
+  let sawOverload = false;
+  let sawBadOutput = false;
 
-  // Outer loop: try each API key in order (rotate on 429 rate limit)
-  for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
-    const currentKey = apiKeys[keyIdx];
-    const genAI = new GoogleGenerativeAI(currentKey);
-    let keyRateLimited = false;
+  // Outer loop: key ระบบก่อน แล้วค่อย key กลางใน DB
+  for (const entry of apiKeys) {
+    const genAI = new GoogleGenerativeAI(entry.key);
+    let keyFailed = false;
 
-    // Inner loop: try each model with the current API key
+    // Inner loop: ลองทีละโมเดลด้วย key นี้
     for (const modelName of candidateModels) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
@@ -104,17 +118,42 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
             .replace(/\s*```$/i, '')
             .trim();
 
-          return { success: true, data: JSON.parse(jsonStr), usedModel: modelName, usedKeyIndex: keyIdx + 1 };
+          return {
+            success: true,
+            data: JSON.parse(jsonStr),
+            usedModel: modelName,
+            usedKeySource: entry.source,
+          };
         } catch (err: any) {
           lastError = err;
-          const isRateLimit = err?.message?.includes('429') || err?.message?.includes('quota') || err?.message?.includes('high demand');
-          if (isRateLimit) {
-            // Rate limited on this key — switch to next API key
-            keyRateLimited = true;
-            console.warn(`API key #${keyIdx + 1} rate limited (429), switching to next key...`);
+          const msg: string = String(err?.message || '');
+
+          const isInvalidKey = /API key not valid|API_KEY_INVALID|API key expired|PERMISSION_DENIED|\[40[013]/i.test(msg);
+          const isQuota = /\[429|429 |quota|RESOURCE_EXHAUSTED|rate limit/i.test(msg);
+          const isModelGone = /\[404|404 |no longer available|is not found/i.test(msg);
+          const isOverload = /\[503|503 |high demand|overloaded|UNAVAILABLE/i.test(msg);
+
+          if (isInvalidKey) {
+            failures.push({ source: entry.source, kind: 'invalid' });
+            keyFailed = true;
             break;
           }
-          // Retry once on transient errors, skip model on others
+          if (isQuota) {
+            console.warn(`Gemini key (${entry.source}) quota/rate limited, switching to next key...`);
+            failures.push({ source: entry.source, kind: 'quota' });
+            keyFailed = true;
+            break;
+          }
+          if (isModelGone) {
+            console.warn(`Model ${modelName} unavailable (404), trying next model...`);
+            break; // ข้ามไปโมเดลถัดไป
+          }
+          if (isOverload) {
+            sawOverload = true;
+            break; // โมเดลคนใช้เยอะ ข้ามไปโมเดลถัดไป
+          }
+          if (err instanceof SyntaxError) sawBadOutput = true;
+          // error อื่น: ลองซ้ำอีก 1 ครั้ง แล้วข้ามโมเดล
           if (attempt === 1) {
             await new Promise((resolve) => setTimeout(resolve, 500));
             continue;
@@ -122,11 +161,27 @@ async function analyzeImageWithGemini(imageBase64: string, mimeType: string): Pr
           break;
         }
       }
-      if (keyRateLimited) break; // Stop trying models with this key, rotate to next key
+      if (keyFailed) break;
     }
   }
 
-  throw lastError;
+  // ทุก key/โมเดลล้มเหลว → ส่ง error แบบมีชนิด ให้หน้าเว็บตัดสินใจ
+  const last = failures[failures.length - 1];
+  if (last) {
+    throw new AIError(
+      last.kind === 'quota' ? 'KEY_QUOTA' : 'KEY_INVALID',
+      last.kind === 'quota' ? 'API Key หมดโควตาหรือถูกจำกัดการใช้งาน' : 'API Key ไม่ถูกต้องหรือหมดอายุ',
+      true,
+      last.source
+    );
+  }
+  if (sawOverload) {
+    throw new AIError('AI_BUSY', 'ระบบ AI ของ Google กำลังมีผู้ใช้งานหนาแน่น กรุณาลองใหม่อีกครั้งในสักครู่', false);
+  }
+  if (sawBadOutput) {
+    throw new AIError('BAD_IMAGE', 'AI อ่านข้อมูลจากภาพไม่ได้ กรุณาถ่ายภาพใหม่ให้ชัดเจนขึ้น', false);
+  }
+  throw new AIError('AI_ERROR', lastError?.message || 'AI วิเคราะห์ไม่สำเร็จ', false);
 }
 
 // ---- Helper: Convert any year (พ.ศ. or 2-digit) to 4-digit CE (ค.ศ.) ----
@@ -275,63 +330,66 @@ export async function POST(request: Request) {
 
     // === ACTION: CHECK API KEY ===
     if (action === 'CHECK_KEY') {
-      // Check all available keys (GEMINI_API_KEY, GEMINI_API_KEY_2, ...)
-      const hasAnyKey = !!(process.env.GEMINI_API_KEY?.trim()) ||
-        Array.from({ length: 9 }, (_, i) => process.env[`GEMINI_API_KEY_${i + 2}`])
-          .some(k => k && k.trim() !== '');
-      return NextResponse.json({ hasApiKey: hasAnyKey });
+      const keys = await getAllKeys();
+      return NextResponse.json({
+        hasApiKey: keys.length > 0,
+        systemKeyAvailable: keys.some((k) => k.source === 'system'),
+        sharedKeyAvailable: keys.some((k) => k.source === 'shared'),
+      });
     }
 
     // === ACTION: ANALYZE IMAGE ===
     if (action === 'ANALYZE') {
-      // Check if any API key is available
-      const hasAnyKey = !!(process.env.GEMINI_API_KEY?.trim()) ||
-        Array.from({ length: 9 }, (_, i) => process.env[`GEMINI_API_KEY_${i + 2}`])
-          .some(k => k && k.trim() !== '');
-
-      // Try Gemini Vision first if any API key exists
-      if (hasAnyKey && imageBase64) {
-        try {
-          const aiResult = await analyzeImageWithGemini(imageBase64, mimeType || 'image/jpeg');
-          if (aiResult.success) {
-            const data = aiResult.data;
-            data.rows = resolveLotNumbers(data.rows || []);
-            data.rows = normalizeAllDatesToCE(data.rows);
-
-            // Extract or enrich formYear and sheetNumber from cardNo (e.g. 01/26 -> sheet 01, year 2026)
-            const parsedForm = parseFormNumber(data.cardNo || '');
-            if (!data.formYear && parsedForm.formYear) {
-              data.formYear = parsedForm.formYear;
-            } else if (data.formYear) {
-              data.formYear = convertYearToCE(Number(data.formYear));
-            }
-            if (!data.sheetNumber && parsedForm.sheetNumber) {
-              data.sheetNumber = parsedForm.sheetNumber;
-            }
-            data.formYearInfo = parsedForm.formYearInfo || (data.formYear ? `ปี ค.ศ. ${data.formYear}` : '');
-
-            return NextResponse.json({
-              success: true,
-              data,
-              engine: 'gemini-vision',
-              message: `วิเคราะห์ภาพสำเร็จ (โมเดล ${aiResult.usedModel || 'Gemini'}) ตรวจสอบปี ค.ศ. เรียบร้อย`,
-            });
-          }
-        } catch (aiErr: any) {
-          console.error('Gemini Vision error:', aiErr.message);
-          return NextResponse.json({
-            success: false,
-            error: `AI ไม่สามารถอ่านภาพได้: ${aiErr.message}`,
-            hint: 'กรุณาตรวจสอบ GEMINI_API_KEY ในไฟล์ .env.local หรือลองถ่ายภาพใหม่ที่ชัดเจนกว่าเดิม',
-          }, { status: 422 });
-        }
+      if (!imageBase64) {
+        return NextResponse.json(
+          { success: false, code: 'BAD_IMAGE', error: 'ไม่พบข้อมูลรูปภาพ กรุณาอัปโหลดรูปใหม่' },
+          { status: 400 }
+        );
       }
 
-      // No API key available — return error
-      return NextResponse.json({
-        success: false,
-        error: 'ยังไม่ได้ตั้งค่า Gemini API Key กรุณาเพิ่ม GEMINI_API_KEY ใน Environment Variables',
-      }, { status: 401 });
+      // ลำดับ: key ระบบ (env) ก่อน → key กลางที่เก็บใน DB
+      const apiKeys = await getAllKeys();
+
+      try {
+        const aiResult = await analyzeImageWithGemini(imageBase64, mimeType || 'image/jpeg', apiKeys);
+        const data = aiResult.data;
+        data.rows = resolveLotNumbers(data.rows || []);
+        data.rows = normalizeAllDatesToCE(data.rows);
+
+        // Extract or enrich formYear and sheetNumber from cardNo (e.g. 01/26 -> sheet 01, year 2026)
+        const parsedForm = parseFormNumber(data.cardNo || '');
+        if (!data.formYear && parsedForm.formYear) {
+          data.formYear = parsedForm.formYear;
+        } else if (data.formYear) {
+          data.formYear = convertYearToCE(Number(data.formYear));
+        }
+        if (!data.sheetNumber && parsedForm.sheetNumber) {
+          data.sheetNumber = parsedForm.sheetNumber;
+        }
+        data.formYearInfo = parsedForm.formYearInfo || (data.formYear ? `ปี ค.ศ. ${data.formYear}` : '');
+
+        return NextResponse.json({
+          success: true,
+          data,
+          engine: 'gemini-vision',
+          keySource: aiResult.usedKeySource,
+          message: `วิเคราะห์ภาพสำเร็จ (โมเดล ${aiResult.usedModel || 'Gemini'}) ตรวจสอบปี ค.ศ. เรียบร้อย`,
+        });
+      } catch (aiErr: any) {
+        console.error('Gemini Vision error:', aiErr?.code, aiErr?.message);
+        const isTyped = aiErr instanceof AIError;
+        const needsKey = isTyped ? aiErr.needsKey : false;
+        return NextResponse.json(
+          {
+            success: false,
+            code: isTyped ? aiErr.code : 'AI_ERROR',
+            needsKey,
+            keySource: isTyped ? aiErr.keySource : undefined,
+            error: isTyped ? aiErr.message : `AI ไม่สามารถอ่านภาพได้: ${aiErr?.message || ''}`,
+          },
+          { status: needsKey ? 401 : 422 }
+        );
+      }
     }
 
     // === ACTION: COMMIT TO DATABASE ===

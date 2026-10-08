@@ -113,9 +113,8 @@ export default function SettingsPage() {
             <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
               <li>ไปที่ <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold inline-flex items-center gap-0.5">Google AI Studio <ExternalLink className="w-3 h-3" /></a></li>
               <li>กด <strong>"Create API key"</strong> แล้วเลือก Project</li>
-              <li>คัดลอก Key (ขึ้นต้นด้วย <code className="bg-blue-100 px-1 rounded">AIza...</code>)</li>
-              <li>วางลงในช่องด้านล่างแล้วกด <strong>บันทึก</strong></li>
-              <li>เริ่มต้นเซิร์ฟเวอร์ใหม่: ปิดแล้วรัน <code className="bg-blue-100 px-1 rounded font-mono">npm run dev</code></li>
+              <li>คัดลอก Key มาวางในช่องด้านล่างแล้วกด <strong>บันทึก</strong> (ระบบจะตรวจสอบ key ให้ก่อนบันทึก)</li>
+              <li>ใช้งานได้ทันที ไม่ต้องเริ่มเซิร์ฟเวอร์ใหม่</li>
             </ol>
           </div>
 
@@ -164,8 +163,8 @@ export default function SettingsPage() {
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 flex items-start gap-2">
             <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400" />
             <span>
-              API Key จะถูกบันทึกลงไฟล์ <code className="bg-slate-200 px-1 rounded font-mono">.env.local</code> บนเครื่องของคุณเท่านั้น ไม่มีการส่งข้อมูลออกนอกระบบ
-              และไฟล์นี้ถูกตั้งค่าให้ Git ไม่ติดตาม (ปลอดภัย)
+              ระบบจะใช้ <strong>API ของระบบ (Environment Variables)</strong> ก่อนเสมอ หากไม่มีหรือหมดโควตา จึงใช้ key กลางนี้แทน
+              key ที่ใส่ที่นี่ถูกเก็บในฐานข้อมูลและ <strong>ใช้ร่วมกันทุกคน</strong> ที่ใช้งานเว็บนี้ (ไม่ถูกส่งเข้า Git)
             </span>
           </div>
         </div>
