@@ -323,13 +323,40 @@ export async function DELETE(req: NextRequest) {
         await prisma.stockTransaction.delete({ where: { id } });
         break;
       case 'products':
-        await prisma.product.delete({ where: { id } });
+        await prisma.$transaction(async (tx) => {
+          const orders = await tx.productionOrder.findMany({
+            where: { productId: id },
+            select: { id: true },
+          });
+          const orderIds = orders.map((o) => o.id);
+          if (orderIds.length > 0) {
+            await tx.requisitionItem.deleteMany({
+              where: { orderId: { in: orderIds } },
+            });
+            await tx.productionOrder.deleteMany({
+              where: { productId: id },
+            });
+          }
+          await tx.recipeItem.deleteMany({
+            where: { productId: id },
+          });
+          await tx.product.delete({
+            where: { id },
+          });
+        });
         break;
       case 'recipes':
         await prisma.recipeItem.delete({ where: { id } });
         break;
       case 'orders':
-        await prisma.productionOrder.delete({ where: { id } });
+        await prisma.$transaction(async (tx) => {
+          await tx.requisitionItem.deleteMany({
+            where: { orderId: id },
+          });
+          await tx.productionOrder.delete({
+            where: { id },
+          });
+        });
         break;
       case 'sections':
         await prisma.section.delete({ where: { id } });
@@ -341,6 +368,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, message: 'ลบรายการสำเร็จ' });
   } catch (error: any) {
     console.error('DB Studio DELETE error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error.code === 'P2003' || error.message?.includes('Foreign key constraint')) {
+      return NextResponse.json(
+        { error: 'ไม่สามารถลบรายการนี้ได้ เนื่องจากมีข้อมูลอื่นในระบบอ้างอิงอยู่ กรุณาลบข้อมูลที่เกี่ยวข้องก่อน' },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการลบข้อมูล' }, { status: 500 });
   }
 }

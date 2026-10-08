@@ -63,7 +63,7 @@ export default function DBStudioPage() {
       const res = await fetch('/api/admin/db-studio?table=stats');
       if (res.ok) {
         const data = await res.json();
-        setStats(data);
+        setStats(data || {});
       }
     } catch (e) {
       console.error('Failed to fetch stats:', e);
@@ -78,12 +78,15 @@ export default function DBStudioPage() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setRecords(data.records || []);
+        setRecords(Array.isArray(data.records) ? data.records : []);
       } else {
-        showNotification('error', 'ไม่สามารถโหลดข้อมูลตารางได้');
+        setRecords([]);
+        const err = await res.json().catch(() => ({}));
+        showNotification('error', err.error || 'ไม่สามารถโหลดข้อมูลตารางได้');
       }
-    } catch (e) {
-      showNotification('error', 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล');
+    } catch (e: any) {
+      setRecords([]);
+      showNotification('error', e?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล');
     } finally {
       setIsLoading(false);
     }
@@ -451,7 +454,7 @@ export default function DBStudioPage() {
             <div className="text-center space-y-1">
               <h3 className="font-bold text-slate-900 text-base">ยืนยันการลบข้อมูล?</h3>
               <p className="text-xs text-slate-500">
-                คุณกำลังจะลบรายการในตาราง <strong>{activeMeta.label}</strong> (ID: {deletingRecord.id.slice(0, 8)}...)
+                คุณกำลังจะลบรายการในตาราง <strong>{activeMeta.label}</strong> (ID: {String(deletingRecord?.id || '').slice(0, 8)}...)
               </p>
               <p className="text-[11px] text-red-600 font-semibold pt-1">
                 ⚠️ ข้อมูลที่ถูกลบจะไม่สามารถกู้คืนได้ และหากมีรายการอ้างอิงอยู่ระบบจะปฏิเสธการลบ
@@ -477,6 +480,25 @@ export default function DBStudioPage() {
       )}
     </div>
   );
+}
+
+// Safe number formatting helper
+function safeNumber(val: any, fallback = 0): string {
+  if (val === null || val === undefined) return Number(fallback).toLocaleString();
+  const n = Number(val);
+  return isNaN(n) ? String(fallback) : n.toLocaleString();
+}
+
+// Safe date to input string helper (YYYY-MM-DD)
+function safeDateToInput(dateInput: any): string {
+  if (!dateInput) return '';
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return '';
+  }
 }
 
 // Helpers: Render Table Headers
@@ -561,25 +583,31 @@ function renderTableHeaders(table: TableKey) {
 
 // Helpers: Render Table Cells
 function renderTableCells(table: TableKey, record: any) {
+  if (!record) return null;
+
   switch (table) {
-    case 'materials':
+    case 'materials': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{record.code}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
           <td className="py-2.5 px-3 text-slate-600">{record.section?.name || '-'}</td>
-          <td className="py-2.5 px-3 text-center text-slate-700">{record.baseUnit}</td>
-          <td className="py-2.5 px-3 text-right font-mono">{record.minSafetyStock.toLocaleString()}</td>
+          <td className="py-2.5 px-3 text-center text-slate-700">{record.baseUnit || 'kg'}</td>
+          <td className="py-2.5 px-3 text-right font-mono">{safeNumber(record.minSafetyStock, 0)}</td>
         </>
       );
-    case 'lots':
-      const isExpired = record.expDate && new Date(record.expDate) < new Date();
+    }
+    case 'lots': {
+      const expDateObj = record.expDate ? new Date(record.expDate) : null;
+      const isExpired = Boolean(expDateObj && !isNaN(expDateObj.getTime()) && expDateObj < new Date());
+      const baseUnit = record.material?.baseUnit || '';
+
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{record.lotNumber}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{record.lotNumber || '-'}</td>
           <td className="py-2.5 px-3">
-            <span className="font-semibold text-slate-800">{record.material.name}</span>
-            <span className="text-[10px] text-slate-400 block font-mono">{record.material.code}</span>
+            <span className="font-semibold text-slate-800">{record.material?.name || '-'}</span>
+            <span className="text-[10px] text-slate-400 block font-mono">{record.material?.code || ''}</span>
           </td>
           <td className="py-2.5 px-3 text-slate-600">{formatDate(record.receiveDate)}</td>
           <td className="py-2.5 px-3 font-mono">
@@ -592,10 +620,10 @@ function renderTableCells(table: TableKey, record: any) {
             )}
           </td>
           <td className="py-2.5 px-3 text-right font-mono text-slate-500">
-            {record.initialQuantity.toLocaleString()} {record.material.baseUnit}
+            {safeNumber(record.initialQuantity)} {baseUnit}
           </td>
           <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
-            {record.quantityRemaining.toLocaleString()} {record.material.baseUnit}
+            {safeNumber(record.quantityRemaining)} {baseUnit}
           </td>
           <td className="py-2.5 px-3 text-center">
             <span
@@ -605,13 +633,16 @@ function renderTableCells(table: TableKey, record: any) {
                   : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {record.status}
+              {record.status || 'ACTIVE'}
             </span>
           </td>
         </>
       );
-    case 'transactions':
+    }
+    case 'transactions': {
       const isPositive = record.type === 'INBOUND';
+      const baseUnit = record.material?.baseUnit || '';
+
       return (
         <>
           <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{formatDate(record.transactionDate)}</td>
@@ -625,49 +656,52 @@ function renderTableCells(table: TableKey, record: any) {
                   : 'bg-blue-100 text-blue-800'
               }`}
             >
-              {record.type}
+              {record.type || 'TX'}
             </span>
           </td>
-          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material.name}</td>
+          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material?.name || '-'}</td>
           <td className="py-2.5 px-3 font-mono text-xs">{record.lot?.lotNumber || '-'}</td>
           <td className="py-2.5 px-3 text-right font-mono font-bold">
             <span className={isPositive ? 'text-emerald-600' : 'text-slate-900'}>
-              {isPositive ? '+' : '-'}{Math.abs(record.quantity).toLocaleString()} {record.material.baseUnit}
+              {isPositive ? '+' : '-'}{safeNumber(Math.abs(Number(record.quantity) || 0))} {baseUnit}
             </span>
           </td>
           <td className="py-2.5 px-3 font-mono text-xs text-blue-700">{record.documentRef || '-'}</td>
           <td className="py-2.5 px-3 text-slate-500 truncate max-w-xs">{record.remarks || '-'}</td>
         </>
       );
-    case 'products':
+    }
+    case 'products': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-purple-700">{record.code}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name}</td>
-          <td className="py-2.5 px-3 text-center text-slate-700">{record.unit}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-purple-700">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
+          <td className="py-2.5 px-3 text-center text-slate-700">{record.unit || 'ชิ้น'}</td>
           <td className="py-2.5 px-3 text-center font-mono">{record._count?.recipeItems ?? 0} รายการ</td>
           <td className="py-2.5 px-3 text-center font-mono">{record._count?.productionOrders ?? 0} ครั้ง</td>
         </>
       );
-    case 'recipes':
+    }
+    case 'recipes': {
       return (
         <>
-          <td className="py-2.5 px-3 font-semibold text-purple-900">{record.product.name}</td>
-          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material.name}</td>
+          <td className="py-2.5 px-3 font-semibold text-purple-900">{record.product?.name || '-'}</td>
+          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material?.name || '-'}</td>
           <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-            {record.quantityRequired.toLocaleString()}
+            {safeNumber(record.quantityRequired)}
           </td>
-          <td className="py-2.5 px-3 text-center text-slate-600">{record.unit}</td>
+          <td className="py-2.5 px-3 text-center text-slate-600">{record.unit || 'kg'}</td>
           <td className="py-2.5 px-3 text-slate-500">{record.notes || '-'}</td>
         </>
       );
-    case 'orders':
+    }
+    case 'orders': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{record.orderNo}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-800">{record.product.name}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{record.orderNo || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-800">{record.product?.name || '-'}</td>
           <td className="py-2.5 px-3 text-right font-mono font-bold">
-            {record.targetQuantity.toLocaleString()} {record.product.unit}
+            {safeNumber(record.targetQuantity)} {record.product?.unit || 'ชิ้น'}
           </td>
           <td className="py-2.5 px-3 text-center">
             <span
@@ -677,22 +711,24 @@ function renderTableCells(table: TableKey, record: any) {
                   : 'bg-amber-100 text-amber-800'
               }`}
             >
-              {record.status}
+              {record.status || 'PENDING'}
             </span>
           </td>
           <td className="py-2.5 px-3 text-slate-600">{formatDate(record.createdAt)}</td>
           <td className="py-2.5 px-3 text-slate-500 truncate max-w-xs">{record.notes || '-'}</td>
         </>
       );
-    case 'sections':
+    }
+    case 'sections': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-teal-700">{record.code}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-teal-700">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
           <td className="py-2.5 px-3 text-slate-500">{record.description || '-'}</td>
           <td className="py-2.5 px-3 text-center font-mono">{record._count?.materials ?? 0} รายการ</td>
         </>
       );
+    }
   }
 }
 
@@ -786,7 +822,7 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
               <label className="block text-xs font-bold text-slate-700 mb-1">วันหมดอายุ (EXP):</label>
               <input
                 type="date"
-                value={record.expDate ? new Date(record.expDate).toISOString().slice(0, 10) : ''}
+                value={safeDateToInput(record.expDate)}
                 onChange={(e) => updateField('expDate', e.target.value ? new Date(e.target.value) : null)}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
               />
