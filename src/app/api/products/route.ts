@@ -53,6 +53,18 @@ export async function POST(request: Request) {
       },
     });
 
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Product',
+        recordId: product.id,
+        action: 'CREATE',
+        summary: `สร้างสูตรสินค้าใหม่: ${product.code} - ${product.name} (สูตรผลิต ${(recipeItems || []).length} รายการ)`,
+        newData: JSON.stringify(product),
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
+
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
