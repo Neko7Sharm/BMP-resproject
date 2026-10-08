@@ -25,11 +25,11 @@ export async function optimizeImageForOCR(file: File): Promise<{
 
       img.onload = () => {
         try {
-          const maxDimension = 2048;
+          const maxDimension = 1600;
           let width = img.width;
           let height = img.height;
 
-          // คำนวณ Scale เพื่อไม่ให้เกิน 2048px
+          // คำนวณ Scale เพื่อไม่ให้เกิน 1600px (ขนาดเหมาะสมที่สุดสำหรับ OCR เร็วและไม่ติด Timeout)
           if (width > maxDimension || height > maxDimension) {
             if (width > height) {
               height = Math.round((height * maxDimension) / width);
@@ -63,8 +63,8 @@ export async function optimizeImageForOCR(file: File): Promise<{
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
 
-          // แปลงเป็น JPEG คุณภาพ 0.85
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          // แปลงเป็น JPEG คุณภาพ 0.80 (ขนาดเล็กลงครึ่งหนึ่ง ส่งไวมาก)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
           const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
           const optimizedSizeKB = Math.round((base64.length * 3) / 4 / 1024);
 
