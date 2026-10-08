@@ -437,20 +437,14 @@ export default function ScanPage() {
         </div>
       </div>
 
-      {/* API Key Notice */}
+      {/* AI Status */}
       {hasApiKey === false && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-          <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
-            <strong>โหมดตัวอย่าง (Demo Mode)</strong> — ยังไม่ได้ตั้งค่า Gemini API Key
-            ระบบจะแสดงข้อมูลตัวอย่างจากใบการ์ดตัวอย่างแทนการวิเคราะห์ภาพจริง
-            <br />
-            <span className="font-medium">วิธีตั้งค่า:</span> เปิดไฟล์{' '}
-            <code className="bg-amber-100 px-1 rounded font-mono text-xs">.env.local</code>{' '}
-            ในโฟลเดอร์โปรเจกต์ แล้วใส่ key จาก{' '}
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
-              Google AI Studio
-            </a>
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-rose-800">
+            <strong>ไม่พบ Gemini API Key</strong> — กรุณาตั้งค่า{' '}
+            <code className="bg-rose-100 px-1 rounded font-mono text-xs">GEMINI_API_KEY</code>{' '}
+            ใน Vercel Environment Variables เพื่อเปิดใช้งานระบบสแกน AI
           </div>
         </div>
       )}

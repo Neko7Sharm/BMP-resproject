@@ -327,48 +327,11 @@ export async function POST(request: Request) {
         }
       }
 
-      // Fallback: return sample data from the uploaded stock card image
-      const fallbackData = {
-        materialName: 'แอลกอฮอล์ 95% (Ethanol 95%)',
-        unit: 'kg',
-        cardNo: '006/26',
-        formYear: 2026,
-        sheetNumber: '006',
-        formYearInfo: 'ใบที่ 006 ของปี ค.ศ. 2026',
-        creator: 'แสงอรุณ ศรีสุข',
-        position: 'หัวหน้าแผนกคลังสินค้า',
-        rows: [
-          { id: 'r1',  date: '07/08/2026', lotNumber: '100726', inboundQty: 0,    outboundQty: 394, balanceQty: 909,  totalQty: 4617, expDate: '',           remarks: '' },
-          { id: 'r2',  date: '10/08/2026', lotNumber: '100726', inboundQty: 0,    outboundQty: 300, balanceQty: 609,  totalQty: 4317, expDate: '',           remarks: '' },
-          { id: 'r3',  date: '17/08/2026', lotNumber: '080826', inboundQty: 1879, outboundQty: 0,   balanceQty: 1879, totalQty: 6196, expDate: '2027-08-07', remarks: 'EXP. 7/8/27' },
-          { id: 'r4',  date: '17/08/2026', lotNumber: '100726', inboundQty: 0,    outboundQty: 609, balanceQty: 0,    totalQty: 5587, expDate: '',           remarks: '' },
-          { id: 'r5',  date: '17/08/2026', lotNumber: '140726', inboundQty: 0,    outboundQty: 388, balanceQty: 1472, totalQty: 5199, expDate: '',           remarks: '' },
-          { id: 'r6',  date: '18/08/2026', lotNumber: '140726', inboundQty: 0,    outboundQty: 1240,balanceQty: 232,  totalQty: 3959, expDate: '',           remarks: '' },
-          { id: 'r7',  date: '21/08/2026', lotNumber: '200826', inboundQty: 1894, outboundQty: 0,   balanceQty: 1894, totalQty: 5853, expDate: '2027-08-19', remarks: 'EXP. 19/8/27' },
-          { id: 'r8',  date: '20/08/2026', lotNumber: '140726', inboundQty: 0,    outboundQty: 232, balanceQty: 0,    totalQty: 5621, expDate: '',           remarks: '' },
-          { id: 'r9',  date: '20/08/2026', lotNumber: '210726', inboundQty: 0,    outboundQty: 268, balanceQty: 1580, totalQty: 5403, expDate: '',           remarks: '' },
-          { id: 'r10', date: '26/08/2026', lotNumber: '210726', inboundQty: 0,    outboundQty: 591, balanceQty: 989,  totalQty: 4812, expDate: '',           remarks: '' },
-          { id: 'r11', date: '27/08/2026', lotNumber: '210726', inboundQty: 0,    outboundQty: 240, balanceQty: 749,  totalQty: 4572, expDate: '',           remarks: '' },
-          { id: 'r12', date: '01/09/2026', lotNumber: '210726', inboundQty: 0,    outboundQty: 608, balanceQty: 141,  totalQty: 3964, expDate: '',           remarks: '' },
-          { id: 'r13', date: '01/09/2026', lotNumber: '210726', inboundQty: 0,    outboundQty: 141, balanceQty: 0,    totalQty: 3823, expDate: '',           remarks: '' },
-          { id: 'r14', date: '01/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 159, balanceQty: 1720, totalQty: 3664, expDate: '',           remarks: '' },
-          { id: 'r15', date: '02/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 300, balanceQty: 1420, totalQty: 3364, expDate: '',           remarks: '' },
-          { id: 'r16', date: '08/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 300, balanceQty: 1120, totalQty: 3064, expDate: '',           remarks: '' },
-          { id: 'r17', date: '10/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 300, balanceQty: 820,  totalQty: 2764, expDate: '',           remarks: '' },
-          { id: 'r18', date: '14/09/2026', lotNumber: '120926', inboundQty: 1873, outboundQty: 0,   balanceQty: 1873, totalQty: 4637, expDate: '2027-09-11', remarks: 'EXP. 11/9/27' },
-          { id: 'r19', date: '17/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 320, balanceQty: 500,  totalQty: 4137, expDate: '',           remarks: '' },
-          { id: 'r20', date: '23/09/2026', lotNumber: '080826', inboundQty: 0,    outboundQty: 18,  balanceQty: 482,  totalQty: 4119, expDate: '',           remarks: '' },
-        ],
-      };
-
+      // No API key available — return error
       return NextResponse.json({
-        success: true,
-        data: fallbackData,
-        engine: 'demo-mode',
-        message: !hasAnyKey
-          ? '⚠️ ยังไม่ได้ตั้ง Gemini API Key — แสดงตัวอย่างข้อมูลจากใบการ์ดจริง กรุณาตั้งค่า API Key เพื่อเปิดใช้งาน AI วิเคราะห์ภาพจริง'
-          : 'วิเคราะห์ด้วย Template Engine (ไม่มี API Key)',
-      });
+        success: false,
+        error: 'ยังไม่ได้ตั้งค่า Gemini API Key กรุณาเพิ่ม GEMINI_API_KEY ใน Environment Variables',
+      }, { status: 401 });
     }
 
     // === ACTION: COMMIT TO DATABASE ===
