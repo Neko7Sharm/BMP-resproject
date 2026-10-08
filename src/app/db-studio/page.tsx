@@ -190,7 +190,7 @@ export default function DBStudioPage() {
   const activeMeta = useMemo(() => TABLES.find((t) => t.key === activeTable) || TABLES[0], [activeTable]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 -m-4 sm:-m-6 md:-m-8 p-4 sm:p-6 md:p-8 space-y-6">
+    <div className="space-y-6">
       {/* Backoffice Dark Top Bar */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -202,9 +202,6 @@ export default function DBStudioPage() {
               <div className="flex items-center gap-2.5">
                 <h1 className="text-lg font-mono font-bold text-white flex items-center gap-2">
                   <span>DB STUDIO CONSOLE</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                    BACKOFFICE MODE
-                  </span>
                 </h1>
                 <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-semibold border border-emerald-800/80 inline-flex items-center gap-1.5 shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>

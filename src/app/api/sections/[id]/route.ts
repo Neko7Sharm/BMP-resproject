@@ -47,6 +47,8 @@ export async function PUT(
       return NextResponse.json({ error: 'กรุณาระบุรหัสและชื่อโซน' }, { status: 400 });
     }
 
+    const oldRecord = await prisma.section.findUnique({ where: { id: params.id } });
+
     const updated = await prisma.section.update({
       where: { id: params.id },
       data: {
@@ -55,6 +57,19 @@ export async function PUT(
         description: description || null,
       },
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Section',
+        recordId: params.id,
+        action: 'UPDATE',
+        summary: `แก้ไขโซนคลัง: ${updated.code} - ${updated.name}`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        newData: JSON.stringify(updated),
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json(updated);
   } catch (error: any) {
@@ -81,9 +96,23 @@ export async function DELETE(
       );
     }
 
+    const oldRecord = await prisma.section.findUnique({ where: { id: params.id } });
+
     await prisma.section.delete({
       where: { id: params.id },
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Section',
+        recordId: params.id,
+        action: 'DELETE',
+        summary: `ลบโซนคลัง: ${oldRecord?.code || params.id} - ${oldRecord?.name || ''}`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'ลบโซนคลังเรียบร้อยแล้ว' });
   } catch (error: any) {

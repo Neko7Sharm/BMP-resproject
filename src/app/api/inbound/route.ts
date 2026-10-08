@@ -60,6 +60,18 @@ export async function POST(request: Request) {
       return { lot, transaction };
     });
 
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'MaterialLot',
+        recordId: result.lot.id,
+        action: 'CREATE',
+        summary: `รับวัตถุดิบเข้า: ล็อต ${result.lot.lotNumber} จำนวน ${qty} หน่วย (materialId: ${materialId})`,
+        newData: JSON.stringify({ lot: result.lot, transaction: result.transaction }),
+        changedBy: createdBy || 'เจ้าหน้าที่รับของ',
+      },
+    }).catch(() => {});
+
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -35,6 +35,11 @@ export async function PUT(
     const body = await request.json();
     const { code, name, unit, description, recipeItems } = body;
 
+    const oldRecord = await prisma.product.findUnique({
+      where: { id: params.id },
+      include: { recipeItems: { include: { material: true } } },
+    });
+
     const updated = await prisma.$transaction(async (tx) => {
       // 1. Delete old recipe items
       await tx.recipeItem.deleteMany({
@@ -66,6 +71,19 @@ export async function PUT(
       });
     });
 
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Product',
+        recordId: params.id,
+        action: 'UPDATE',
+        summary: `แก้ไขสินค้า: ${updated.code} - ${updated.name} (สูตรผลิต ${(recipeItems || []).length} รายการ)`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        newData: JSON.stringify(updated),
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -77,6 +95,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const oldRecord = await prisma.product.findUnique({
+      where: { id: params.id },
+      include: { recipeItems: true },
+    });
+
     await prisma.$transaction(async (tx) => {
       // 1. ลบ RequisitionItems ของ ProductionOrders ที่ใช้ product นี้ก่อน
       const orders = await tx.productionOrder.findMany({
@@ -105,6 +128,18 @@ export async function DELETE(
         where: { id: params.id },
       });
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Product',
+        recordId: params.id,
+        action: 'DELETE',
+        summary: `ลบสินค้า: ${oldRecord?.code || params.id} - ${oldRecord?.name || ''} (รวม cascade)`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
