@@ -269,6 +269,46 @@ export default function ScanPage() {
     return trimmed;
   };
 
+  // เปลี่ยนปีในสตริงวันที่ (รองรับทั้ง DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY)
+  const replaceYearInDate = (dateStr: string, newYear: number): string => {
+    if (!dateStr || !newYear) return dateStr;
+    const trimmed = dateStr.trim();
+    // แมตช์ วัน/เดือน/ปี เช่น 07/08/2026 หรือ 07-08-2025
+    const m = trimmed.match(/^(\d{1,2})([-\/\.])(\d{1,2})([-\/\.])(\d{2,4})$/);
+    if (m) {
+      const d = m[1].padStart(2, '0');
+      const sep1 = m[2];
+      const mo = m[3].padStart(2, '0');
+      const sep2 = m[4];
+      return `${d}${sep1}${mo}${sep2}${newYear}`;
+    }
+    return dateStr;
+  };
+
+  // อัปเดตปีของใบ และปรับปีของวันผลิต (date) ในทุกแถวตามปีใหม่ทันที
+  const updateFormYear = (newYear: number | null, cardNoOverride?: string) => {
+    if (!scanResult) return;
+    const targetCardNo = cardNoOverride !== undefined ? cardNoOverride : scanResult.cardNo;
+    const sheet = scanResult.sheetNumber || '';
+    const newYearInfo = newYear ? `ปี ค.ศ. ${newYear}${sheet ? ` (ใบที่ ${sheet})` : ''}` : '';
+
+    // ถ้ามีการระบุปี ค.ศ. 4 หลักที่ถูกต้อง ให้แก้ปีของวันผลิต (date) ในทุกรายการด้วย
+    const updatedRows = (newYear && newYear >= 1900 && newYear <= 2100)
+      ? scanResult.rows.map(r => ({
+          ...r,
+          date: replaceYearInDate(r.date, newYear),
+        }))
+      : scanResult.rows;
+
+    setScanResult({
+      ...scanResult,
+      cardNo: targetCardNo,
+      formYear: newYear,
+      formYearInfo: newYearInfo,
+      rows: updatedRows,
+    });
+  };
+
   // Parse card number (e.g. 01/26 -> sheet 01, year 2026)
   const parseCardNoInfo = (val: string) => {
     if (!val) return { sheet: '', year: null, text: '' };
@@ -290,13 +330,15 @@ export default function ScanPage() {
   const handleCardNoChange = (newVal: string) => {
     if (!scanResult) return;
     const parsed = parseCardNoInfo(newVal);
-    setScanResult({
-      ...scanResult,
-      cardNo: newVal,
-      formYear: parsed.year !== null ? parsed.year : scanResult.formYear,
-      sheetNumber: parsed.sheet || scanResult.sheetNumber,
-      formYearInfo: parsed.text || scanResult.formYearInfo,
-    });
+    if (parsed.year !== null) {
+      // ถ้าพบปีจากเลขที่ใบ เช่น 01/26 -> อัปเดตปีและปรับวันผลิตทุกแถวอัตโนมัติ
+      updateFormYear(parsed.year, newVal);
+    } else {
+      setScanResult({
+        ...scanResult,
+        cardNo: newVal,
+      });
+    }
   };
 
   const addRow = () => {
@@ -754,12 +796,9 @@ export default function ScanPage() {
                       value={scanResult.formYear ?? ''}
                       placeholder="เช่น 2026"
                       onChange={e => {
-                        const y = parseInt(e.target.value) || null;
-                        setScanResult({
-                          ...scanResult,
-                          formYear: y,
-                          formYearInfo: y ? `ปี ค.ศ. ${y}${scanResult.sheetNumber ? ` (ใบที่ ${scanResult.sheetNumber})` : ''}` : '',
-                        });
+                        const val = e.target.value.trim();
+                        const y = val ? parseInt(val) : null;
+                        updateFormYear(y);
                       }}
                       className="w-full px-3 py-2 text-sm font-bold font-mono text-purple-900 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
                     />
@@ -767,8 +806,8 @@ export default function ScanPage() {
                       ค.ศ.
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    ถอดจากเลขที่ใบการ์ดอัตโนมัติ
+                  <p className="text-[10px] text-purple-600 font-medium mt-1">
+                    ✨ เมื่อเปลี่ยนปี ระบบจะแก้วันผลิตของทุกรายการในตารางให้อัตโนมัติ
                   </p>
                 </div>
                 <div>
