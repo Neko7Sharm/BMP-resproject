@@ -77,9 +77,35 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await prisma.product.delete({
-      where: { id: params.id },
+    await prisma.$transaction(async (tx) => {
+      // 1. ลบ RequisitionItems ของ ProductionOrders ที่ใช้ product นี้ก่อน
+      const orders = await tx.productionOrder.findMany({
+        where: { productId: params.id },
+        select: { id: true },
+      });
+      const orderIds = orders.map((o) => o.id);
+
+      if (orderIds.length > 0) {
+        await tx.requisitionItem.deleteMany({
+          where: { orderId: { in: orderIds } },
+        });
+        // 2. ลบ ProductionOrders ที่ใช้ product นี้
+        await tx.productionOrder.deleteMany({
+          where: { productId: params.id },
+        });
+      }
+
+      // 3. ลบ RecipeItems ของ product นี้
+      await tx.recipeItem.deleteMany({
+        where: { productId: params.id },
+      });
+
+      // 4. ลบ Product
+      await tx.product.delete({
+        where: { id: params.id },
+      });
     });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
