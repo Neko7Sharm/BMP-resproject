@@ -6,33 +6,10 @@ import {
   ScanLine, Upload, Loader2, CheckCircle2, AlertCircle, Edit2,
   Save, RefreshCw, ZoomIn, ZoomOut, RotateCcw, Database,
   ChevronDown, Plus, Trash2, X, Image, Info, Eye, Check,
-  ArrowRight, Package, History
+  ArrowRight, Package, History, Sparkles, Zap
 } from 'lucide-react';
-
-// ---------- Types ----------
-interface StockRow {
-  id: string;
-  date: string;
-  lotNumber: string;
-  inboundQty: number;
-  outboundQty: number;
-  balanceQty: number;
-  totalQty: number;
-  expDate: string;
-  remarks: string;
-}
-
-interface ScanResult {
-  materialName: string;
-  unit: string;
-  cardNo: string;
-  formYear?: number | null;
-  sheetNumber?: string | null;
-  formYearInfo?: string;
-  creator: string;
-  position: string;
-  rows: StockRow[];
-}
+import { useScan, StockRow, ScanResult } from '@/context/ScanContext';
+import { optimizeImageForOCR } from '@/lib/imageOptimizer';
 
 interface Section { id: string; code: string; name: string; }
 interface Material {
@@ -46,14 +23,30 @@ interface Material {
 
 // ---------- Main Page ----------
 export default function ScanPage() {
-  const [imageURL, setImageURL] = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string>('');
-  const [imageMime, setImageMime] = useState<string>('image/jpeg');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [engine, setEngine]           = useState<string>('');
-  const [engineMsg, setEngineMsg]     = useState<string>('');
-  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
+  const {
+    isAnalyzing,
+    analyzeProgress,
+    analyzeStepText,
+    scanResult,
+    engine,
+    engineMsg,
+    errorMsg,
+    imageURL,
+    imageBase64,
+    imageMime,
+    imageStats,
+    showKeyModal,
+    keyModalReason,
+    openKeyModal,
+    closeKeyModal,
+    setImageData,
+    startScan,
+    setScanResult,
+    setErrorMsg,
+    resetScan,
+  } = useScan();
+
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitDone, setCommitDone]   = useState(false);
   const [commitStats, setCommitStats] = useState<any>(null);
@@ -66,13 +59,9 @@ export default function ScanPage() {
   const [hasApiKey, setHasApiKey]     = useState<boolean | null>(null);
   const [systemKeyAvailable, setSystemKeyAvailable] = useState(false);
   const [sharedKeyAvailable, setSharedKeyAvailable] = useState(false);
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [keyModalReason, setKeyModalReason] = useState('');
   const [keyInput, setKeyInput] = useState('');
   const [keyError, setKeyError] = useState<string | null>(null);
   const [isSavingKey, setIsSavingKey] = useState(false);
-  const [analyzeProgress, setAnalyzeProgress] = useState(0);
-  const [analyzeStepText, setAnalyzeStepText] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,14 +69,7 @@ export default function ScanPage() {
   useEffect(() => {
     fetch('/api/sections').then(r => r.json()).then(d => setSections(Array.isArray(d) ? d : [])).catch(() => {});
     fetch('/api/materials').then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : [])).catch(() => {});
-    fetch('/api/ai/ocr-stock-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'CHECK_KEY' }) })
-      .then(r => r.json())
-      .then(d => {
-        setHasApiKey(d.hasApiKey === true);
-        setSystemKeyAvailable(d.systemKeyAvailable === true);
-        setSharedKeyAvailable(d.sharedKeyAvailable === true);
-      })
-      .catch(() => setHasApiKey(false));
+    refreshKeyStatus();
   }, []);
 
   // When user selects an existing material from dropdown
@@ -130,22 +112,34 @@ export default function ScanPage() {
     }
   };
 
-  // Read file → base64 + preview URL
-  const processFile = useCallback((file: File) => {
+  // Read file → optimize on client (downscale to max 2048px + JPEG 85%) → store in ScanContext
+  const processFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { setErrorMsg('รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG, WEBP)'); return; }
-    if (file.size > 12 * 1024 * 1024) { setErrorMsg('ไฟล์ใหญ่เกิน 12MB กรุณาลดขนาดก่อนอัปโหลด'); return; }
-    setErrorMsg(null); setScanResult(null); setCommitDone(false); setCommitStats(null);
+    if (file.size > 20 * 1024 * 1024) { setErrorMsg('ไฟล์ใหญ่เกิน 20MB กรุณาลดขนาดก่อนอัปโหลด'); return; }
+    setErrorMsg(null); setCommitDone(false); setCommitStats(null);
     setSelectedMaterialId(''); setSelectedSectionId('');
-    const url = URL.createObjectURL(file);
-    setImageURL(url);
-    setImageMime(file.type);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const b64 = e.target?.result as string;
-      setImageBase64(b64.replace(/^data:image\/\w+;base64,/, ''));
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    setIsOptimizing(true);
+
+    try {
+      const opt = await optimizeImageForOCR(file);
+      setImageData(opt.previewUrl, opt.base64, opt.mimeType, {
+        originalKB: opt.originalSizeKB,
+        optimizedKB: opt.optimizedSizeKB,
+      });
+    } catch (err: any) {
+      console.error('Image optimization error:', err);
+      // Fallback: load raw
+      const url = URL.createObjectURL(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const b64 = (e.target?.result as string).replace(/^data:image\/\w+;base64,/, '');
+        setImageData(url, b64, file.type);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsOptimizing(false);
+    }
+  }, [setErrorMsg, setImageData]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,14 +150,6 @@ export default function ScanPage() {
     e.preventDefault(); setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
-  };
-
-  // ── Shared API Key (เก็บใน DB ใช้ร่วมกันทุกคน) ──
-  const openKeyModal = (reason: string) => {
-    setKeyModalReason(reason);
-    setKeyInput('');
-    setKeyError(null);
-    setShowKeyModal(true);
   };
 
   const refreshKeyStatus = () => {
@@ -189,11 +175,11 @@ export default function ScanPage() {
       });
       const data = await res.json();
       if (!res.ok) { setKeyError(data.error || 'บันทึก API Key ไม่สำเร็จ'); return; }
-      setShowKeyModal(false);
+      closeKeyModal();
       setKeyInput('');
       refreshKeyStatus();
       // สแกนต่อทันทีด้วยรูปเดิม (ไม่ต้องอัปโหลดใหม่)
-      if (imageBase64) handleAnalyze();
+      if (imageBase64) startScan();
     } catch (e: any) {
       setKeyError(e.message);
     } finally {
@@ -201,85 +187,19 @@ export default function ScanPage() {
     }
   };
 
-  // Analyze image via AI
+  // Analyze image via AI (Delegates to global ScanContext so it keeps running in background)
   const handleAnalyze = async () => {
-    if (!imageBase64) { setErrorMsg('กรุณาอัปโหลดรูปภาพก่อน'); return; }
-    setIsAnalyzing(true);
-    setErrorMsg(null);
-    setScanResult(null);
-    setAnalyzeProgress(5);
-    setAnalyzeStepText('กำลังเตรียมข้อมูลรูปภาพ...');
-
-    // Progress simulation timer
-    let currentPct = 5;
-    const progressTimer = setInterval(() => {
-      currentPct += Math.floor(Math.random() * 8) + 3;
-      if (currentPct > 92) {
-        currentPct = 92;
-      }
-      setAnalyzeProgress(currentPct);
-
-      if (currentPct < 25) {
-        setAnalyzeStepText('กำลังอัปโหลดรูปภาพไปยังเซิร์ฟเวอร์...');
-      } else if (currentPct < 55) {
-        setAnalyzeStepText('Gemini AI กำลังตรวจจับตารางและลายมือภาษาไทย...');
-      } else if (currentPct < 80) {
-        setAnalyzeStepText('กำลังสกัดเลขล็อต ยอดรับ-จ่าย และวันหมดอายุ...');
-      } else {
-        setAnalyzeStepText('กำลังจัดหมวดหมู่และตรวจสอบความถูกต้อง...');
-      }
-    }, 400);
-
-    try {
-      const res = await fetch('/api/ai/ocr-stock-card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ANALYZE', imageBase64, mimeType: imageMime }),
-      });
-      const data = await res.json();
-      clearInterval(progressTimer);
-
-      if (!res.ok || !data.success) {
-        setAnalyzeProgress(0);
-        setIsAnalyzing(false);
-        if (data.needsKey) {
-          // key ระบบใช้ไม่ได้ (ไม่มี/หมดโควตา/ผิด) → ขอ key กลางจากผู้ใช้ แล้วสแกนต่ออัตโนมัติ
-          refreshKeyStatus();
-          openKeyModal(
-            data.keySource === 'shared'
-              ? `${data.error} — ใส่ key ใหม่เพื่อใช้แทน key กลางเดิม`
-              : data.code === 'NO_KEY'
-                ? 'ยังไม่มี API Key ในระบบ กรุณาใส่ key เพื่อใช้งานการสแกน'
-                : `${data.error} — ใส่ key ของคุณเพื่อสแกนต่อ`
-          );
-          return;
-        }
-        setErrorMsg(data.error || data.hint || 'AI วิเคราะห์ไม่สำเร็จ');
-        return;
-      }
-
-      setAnalyzeProgress(100);
-      setAnalyzeStepText('ประมวลผลสำเร็จเรียบร้อย!');
-
-      const resData: ScanResult = data.data;
-      if (resData.materialName && materials.length > 0) {
-        autoMatchMaterial(resData.materialName, materials, resData);
-      }
-
-      // Small delay so user sees 100% completion before switching view
-      setTimeout(() => {
-        setScanResult(resData);
-        setEngine(data.engine || '');
-        setEngineMsg(data.message || '');
-        setIsAnalyzing(false);
-      }, 500);
-    } catch (e: any) {
-      clearInterval(progressTimer);
-      setAnalyzeProgress(0);
-      setErrorMsg('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ: ' + e.message);
-      setIsAnalyzing(false);
-    }
+    const success = await startScan();
+    // Auto-match material after successful scan if materialName detected
+    // Note: scanResult will be set by context, matching is handled reactively
   };
+
+  // Reactively auto match material when scanResult appears or changes
+  useEffect(() => {
+    if (scanResult?.materialName && materials.length > 0 && !selectedMaterialId) {
+      autoMatchMaterial(scanResult.materialName, materials, scanResult);
+    }
+  }, [scanResult, materials, selectedMaterialId]);
 
   // Edit a cell in the staging table
   const updateRow = (rowId: string, field: keyof StockRow, value: string | number) => {
@@ -427,9 +347,8 @@ export default function ScanPage() {
   };
 
   const resetAll = () => {
-    setImageURL(null); setImageBase64(''); setScanResult(null);
-    setErrorMsg(null); setCommitDone(false); setCommitStats(null);
-    setEngine(''); setEngineMsg('');
+    resetScan();
+    setCommitDone(false); setCommitStats(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -630,11 +549,19 @@ export default function ScanPage() {
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
               {/* Toolbar */}
               <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                  <Image className="w-3.5 h-3.5 text-purple-500" />
-                  ภาพต้นฉบับ Stock Card
-                </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 truncate">
+                    <Image className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    ภาพ Stock Card
+                  </span>
+                  {imageStats && (
+                    <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800" title={`ขนาดเดิม ${imageStats.originalKB} KB ปรับเหลือ ${imageStats.optimizedKB} KB เพื่อเร่งความเร็ว AI`}>
+                      <Zap className="w-3 h-3 text-emerald-600" />
+                      ลดเหลือ {imageStats.optimizedKB} KB (เร็วขึ้น)
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => setZoom(z => Math.max(50, z - 20))} className="p-1.5 rounded hover:bg-slate-200 text-slate-600"><ZoomOut className="w-3.5 h-3.5" /></button>
                   <span className="text-xs font-mono text-slate-600 w-10 text-center">{zoom}%</span>
                   <button onClick={() => setZoom(z => Math.min(200, z + 20))} className="p-1.5 rounded hover:bg-slate-200 text-slate-600"><ZoomIn className="w-3.5 h-3.5" /></button>
@@ -660,11 +587,13 @@ export default function ScanPage() {
                 <div className="p-4 border-t border-slate-100 bg-white">
                   <button
                     onClick={handleAnalyze}
-                    disabled={isAnalyzing}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition"
+                    disabled={isAnalyzing || isOptimizing}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm shadow-purple-200"
                   >
-                    {isAnalyzing ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" />กำลังวิเคราะห์ภาพด้วย AI...</>
+                    {isOptimizing ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" />กำลังบีบอัดและเตรียมภาพ...</>
+                    ) : isAnalyzing ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" />กำลังวิเคราะห์ภาพด้วย AI (รันในพื้นหลังได้)...</>
                     ) : (
                       <><ScanLine className="w-4 h-4" />วิเคราะห์ภาพด้วย AI</>
                     )}
@@ -1019,7 +948,7 @@ export default function ScanPage() {
                 <h3 className="text-base font-bold text-slate-900">ต้องใช้ Gemini API Key</h3>
                 <p className="text-xs text-amber-700 mt-1">{keyModalReason}</p>
               </div>
-              <button onClick={() => setShowKeyModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={closeKeyModal} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1043,7 +972,7 @@ export default function ScanPage() {
 
             <div className="flex gap-2.5 mt-4">
               <button
-                onClick={() => setShowKeyModal(false)}
+                onClick={closeKeyModal}
                 className="flex-1 px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
               >
                 ยกเลิก

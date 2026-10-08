@@ -103,6 +103,10 @@ async function analyzeImageWithGemini(
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
             safetySettings: [
               { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
               { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
