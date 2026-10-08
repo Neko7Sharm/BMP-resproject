@@ -53,6 +53,19 @@ export async function POST(
         issuerName || 'เจ้าหน้าที่เบิกจ่าย',
         effectiveDate
       );
+
+      // Write Audit Log (non-blocking)
+      prisma.auditLog.create({
+        data: {
+          tableName: 'ProductionOrder',
+          recordId: params.id,
+          action: 'UPDATE',
+          summary: `ตัดสต็อกเบิกผลิต: คำสั่งผลิต ${updated.orderNo} (${updated.product?.name || ''}) ตัดวัตถุดิบ ${allocations?.length || 0} ล็อต`,
+          newData: JSON.stringify(updated),
+          changedBy: issuerName || 'เจ้าหน้าที่เบิกจ่าย',
+        },
+      }).catch(() => {});
+
       return NextResponse.json(updated);
     }
 

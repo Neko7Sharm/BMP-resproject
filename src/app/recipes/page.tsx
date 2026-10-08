@@ -57,9 +57,13 @@ interface Material {
 }
 
 interface RecipeRowState {
-  materialId: string;
+  materialId: string;       // '__NEW__' when isCustom=true
   quantityRequired: number;
   unit: string;
+  isCustom?: boolean;
+  customCode?: string;
+  customName?: string;
+  customBaseUnit?: string;  // 'kg' | 'L' | etc.
 }
 
 function isLiquidUnit(unit: string) {
@@ -183,15 +187,49 @@ export default function RecipesPage() {
   }
 
   function handleMaterialChange(index: number, newMatId: string) {
-    const newMat = materials.find((m) => m.id === newMatId);
     setRecipeRows((prev) => {
       const updated = [...prev];
-      const defaultUnit = newMat ? (isLiquidUnit(newMat.baseUnit) ? 'L' : 'kg') : 'kg';
-      updated[index] = {
-        ...updated[index],
-        materialId: newMatId,
-        unit: defaultUnit,
-      };
+      if (newMatId === '__NEW__') {
+        // Switch to custom mode
+        updated[index] = {
+          ...updated[index],
+          materialId: '__NEW__',
+          isCustom: true,
+          customCode: '',
+          customName: '',
+          customBaseUnit: 'kg',
+          unit: 'kg',
+        };
+      } else {
+        // Switch back to existing material
+        const newMat = materials.find((m) => m.id === newMatId);
+        const defaultUnit = newMat ? (isLiquidUnit(newMat.baseUnit) ? 'L' : 'kg') : 'kg';
+        updated[index] = {
+          ...updated[index],
+          materialId: newMatId,
+          isCustom: false,
+          customCode: undefined,
+          customName: undefined,
+          customBaseUnit: undefined,
+          unit: defaultUnit,
+        };
+      }
+      return updated;
+    });
+  }
+
+  function handleCustomFieldChange(
+    index: number,
+    field: 'customCode' | 'customName' | 'customBaseUnit',
+    value: string
+  ) {
+    setRecipeRows((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      // Auto-sync unit when base unit changes
+      if (field === 'customBaseUnit') {
+        updated[index].unit = isLiquidUnit(value) ? 'L' : 'kg';
+      }
       return updated;
     });
   }
@@ -226,8 +264,46 @@ export default function RecipesPage() {
       return;
     }
 
+    // Validate custom rows
+    for (const row of recipeRows) {
+      if (row.isCustom) {
+        if (!row.customCode?.trim() || !row.customName?.trim()) {
+          alert('กรุณากรอกรหัสและชื่อวัตถุดิบใหม่ทุกแถวที่เลือก "อื่นๆ"');
+          return;
+        }
+      }
+    }
+
     setIsSubmitting(true);
     try {
+      // Step 1: Auto-create any custom (new) materials
+      const resolvedRows = await Promise.all(
+        recipeRows.map(async (row) => {
+          if (!row.isCustom) return row;
+
+          // Create new material via API
+          const matRes = await fetch('/api/materials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: row.customCode!.trim().toUpperCase(),
+              name: row.customName!.trim(),
+              baseUnit: row.customBaseUnit || 'kg',
+              minSafetyStock: 0,
+            }),
+          });
+
+          if (!matRes.ok) {
+            const err = await matRes.json();
+            throw new Error(`สร้างวัตถุดิบ "${row.customName}" ไม่สำเร็จ: ${err.error || ''}`);
+          }
+
+          const newMat = await matRes.json();
+          return { ...row, materialId: newMat.id, isCustom: false };
+        })
+      );
+
+      // Step 2: Save product with resolved materialIds
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
       const method = editingProduct ? 'PUT' : 'POST';
 
@@ -240,7 +316,7 @@ export default function RecipesPage() {
           unit,
           description: desc,
           outputSectionId: outputSectionId || null,
-          recipeItems: recipeRows,
+          recipeItems: resolvedRows,
         }),
       });
 
@@ -251,7 +327,8 @@ export default function RecipesPage() {
         const err = await res.json();
         alert(err.error || 'บันทึกสูตรไม่สำเร็จ');
       }
-    } catch (e) {
+    } catch (e: any) {
+      alert(e?.message || 'เกิดข้อผิดพลาด');
       console.error(e);
     } finally {
       setIsSubmitting(false);
@@ -543,33 +620,95 @@ export default function RecipesPage() {
                 <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                   {recipeRows.map((row, index) => {
                     const mat = materials.find((m) => m.id === row.materialId);
-                    const baseUnit = mat?.baseUnit || 'kg';
-                    const availableUnits = getAvailableUnitsForMaterial(baseUnit);
 
                     return (
                       <div
                         key={index}
-                        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                        className={`flex flex-col gap-2 p-2.5 rounded-xl border transition ${
+                          row.isCustom
+                            ? 'bg-amber-50 border-amber-300'
+                            : 'bg-slate-50 border-slate-200'
+                        }`}
                       >
-                        {/* Material Selector */}
-                        <div className="flex-1 min-w-0">
-                          <select
-                            value={row.materialId}
-                            onChange={(e) => handleMaterialChange(index, e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                        {/* Row header: Material selector + remove */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <select
+                              value={row.isCustom ? '__NEW__' : row.materialId}
+                              onChange={(e) => handleMaterialChange(index, e.target.value)}
+                              className={`w-full px-2.5 py-1.5 text-xs border rounded-lg font-medium outline-none focus:ring-2 ${
+                                row.isCustom
+                                  ? 'border-amber-300 bg-amber-100 text-amber-800 focus:ring-amber-400'
+                                  : 'border-slate-200 bg-white focus:ring-indigo-500'
+                              }`}
+                            >
+                              {materials.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  [{m.code}] {m.name} ({m.baseUnit})
+                                </option>
+                              ))}
+                              <option value="__NEW__">＋ อื่นๆ / วัตถุดิบใหม่ที่ยังไม่มีในระบบ...</option>
+                            </select>
+                          </div>
+                          {/* Remove Row Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipeRow(index)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition shrink-0"
+                            title="ลบแถวนี้"
                           >
-                            {materials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                [{m.code}] {m.name} ({m.baseUnit})
-                              </option>
-                            ))}
-                          </select>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
-                        {/* Quantity and Unit Row */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Quantity Input */}
-                          <div className="w-24">
+                        {/* Custom material inline form */}
+                        {row.isCustom && (
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-700 mb-0.5">รหัส *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="เช่น RM-099"
+                                value={row.customCode || ''}
+                                onChange={(e) => handleCustomFieldChange(index, 'customCode', e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs font-mono font-bold border border-amber-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400 uppercase"
+                              />
+                            </div>
+                            <div className="col-span-1">
+                              <label className="block text-[10px] font-bold text-amber-700 mb-0.5">ชื่อวัตถุดิบ *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="เช่น น้ำหอมกลิ่น A"
+                                value={row.customName || ''}
+                                onChange={(e) => handleCustomFieldChange(index, 'customName', e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-amber-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-700 mb-0.5">หน่วยหลัก</label>
+                              <select
+                                value={row.customBaseUnit || 'kg'}
+                                onChange={(e) => handleCustomFieldChange(index, 'customBaseUnit', e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-amber-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400 font-bold"
+                              >
+                                <option value="kg">kg (กก.)</option>
+                                <option value="g">g (กรัม)</option>
+                                <option value="L">L (ลิตร)</option>
+                                <option value="ml">ml (มล.)</option>
+                                <option value="ชิ้น">ชิ้น</option>
+                                <option value="กล่อง">กล่อง</option>
+                                <option value="ถุง">ถุง</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quantity + Unit row */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-500 shrink-0">จำนวนต่อ 1 {unit || 'หน่วย'}:</span>
+                          <div className="w-28">
                             <input
                               type="number"
                               step="any"
@@ -586,7 +725,7 @@ export default function RecipesPage() {
                             />
                           </div>
 
-                          {/* Unit Selector: kg/g for solid, L/ml for liquid */}
+                          {/* Unit Selector */}
                           <select
                             value={row.unit}
                             onChange={(e) => handleUnitChange(index, e.target.value)}
@@ -607,15 +746,12 @@ export default function RecipesPage() {
                             )}
                           </select>
 
-                          {/* Remove Row Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRecipeRow(index)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                            title="ลบแถวนี้"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Custom badge */}
+                          {row.isCustom && (
+                            <span className="text-[10px] bg-amber-200 text-amber-800 font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                              ใหม่
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

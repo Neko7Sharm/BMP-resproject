@@ -38,6 +38,11 @@ export async function PUT(
     const body = await request.json();
     const { code, name, sectionId, baseUnit, minSafetyStock } = body;
 
+    const oldRecord = await prisma.material.findUnique({
+      where: { id: params.id },
+      include: { section: true },
+    });
+
     const updated = await prisma.material.update({
       where: { id: params.id },
       data: {
@@ -53,6 +58,19 @@ export async function PUT(
       },
     });
 
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Material',
+        recordId: params.id,
+        action: 'UPDATE',
+        summary: `แก้ไขวัตถุดิบ: ${updated.code} - ${updated.name}`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        newData: JSON.stringify(updated),
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -65,6 +83,11 @@ export async function DELETE(
 ) {
   try {
     const materialId = params.id;
+
+    const oldRecord = await prisma.material.findUnique({
+      where: { id: materialId },
+      include: { section: true, lots: true },
+    });
 
     // Use transaction to delete related records safely
     await prisma.$transaction(async (tx) => {
@@ -101,6 +124,18 @@ export async function DELETE(
         where: { id: materialId },
       });
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'Material',
+        recordId: materialId,
+        action: 'DELETE',
+        summary: `ลบวัตถุดิบ: ${oldRecord?.code || materialId} - ${oldRecord?.name || ''} (พร้อมข้อมูลล็อตและประวัติที่เกี่ยวข้อง)`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'ลบวัตถุดิบและข้อมูลที่เกี่ยวข้องเรียบร้อยแล้ว' });
   } catch (error: any) {

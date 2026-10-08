@@ -9,6 +9,11 @@ export async function PUT(
     const body = await request.json();
     const { lotNumber, quantityRemaining, initialQuantity, expDate, mfgDate, costPerUnit } = body;
 
+    const oldRecord = await prisma.materialLot.findUnique({
+      where: { id: params.id },
+      include: { material: true },
+    });
+
     const data: any = {};
     if (lotNumber !== undefined) data.lotNumber = String(lotNumber).trim();
     if (quantityRemaining !== undefined) {
@@ -24,7 +29,21 @@ export async function PUT(
     const updatedLot = await prisma.materialLot.update({
       where: { id: params.id },
       data,
+      include: { material: true },
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'MaterialLot',
+        recordId: params.id,
+        action: 'UPDATE',
+        summary: `แก้ไขล็อต: ${updatedLot.lotNumber} (${updatedLot.material?.name || ''}) คงเหลือ ${updatedLot.quantityRemaining}`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        newData: JSON.stringify(updatedLot),
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json(updatedLot);
   } catch (error: any) {
@@ -38,6 +57,11 @@ export async function DELETE(
 ) {
   try {
     const lotId = params.id;
+
+    const oldRecord = await prisma.materialLot.findUnique({
+      where: { id: lotId },
+      include: { material: true },
+    });
 
     await prisma.$transaction(async (tx) => {
       // 1. Delete RequisitionItems linked to this lot
@@ -55,6 +79,18 @@ export async function DELETE(
         where: { id: lotId },
       });
     });
+
+    // Write Audit Log (non-blocking)
+    prisma.auditLog.create({
+      data: {
+        tableName: 'MaterialLot',
+        recordId: lotId,
+        action: 'DELETE',
+        summary: `ลบล็อต: ${oldRecord?.lotNumber || lotId} (${oldRecord?.material?.name || ''}) คงเหลือ ${oldRecord?.quantityRemaining ?? 0}`,
+        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+        changedBy: 'ผู้ใช้งานระบบ',
+      },
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'ลบล็อตนี้เรียบร้อยแล้ว' });
   } catch (error: any) {
