@@ -20,13 +20,19 @@ import {
   X,
   Save,
   HelpCircle,
-  ExternalLink,
-  ChevronRight,
   ShieldAlert,
+  Eye,
+  Terminal,
+  Activity,
+  ArrowRight,
+  ShieldCheck,
+  Clock,
+  User,
+  Filter,
 } from 'lucide-react';
-import { formatDate } from '@/lib/dateUtils';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
-type TableKey = 'materials' | 'lots' | 'transactions' | 'products' | 'recipes' | 'orders' | 'sections';
+type TableKey = 'materials' | 'lots' | 'transactions' | 'products' | 'recipes' | 'orders' | 'sections' | 'auditLogs';
 
 interface TableMeta {
   key: TableKey;
@@ -34,16 +40,18 @@ interface TableMeta {
   subLabel: string;
   icon: any;
   color: string;
+  badgeColor: string;
 }
 
 const TABLES: TableMeta[] = [
-  { key: 'materials', label: 'วัตถุดิบ', subLabel: 'Materials', icon: Package, color: 'text-blue-600 bg-blue-50' },
-  { key: 'lots', label: 'ล็อตวัตถุดิบ & วันหมดอายุ', subLabel: 'Material Lots', icon: Layers, color: 'text-emerald-600 bg-emerald-50' },
-  { key: 'transactions', label: 'ประวัติรับ-จ่าย สต็อก', subLabel: 'Stock Transactions', icon: History, color: 'text-amber-600 bg-amber-50' },
-  { key: 'products', label: 'สินค้าที่ผลิต', subLabel: 'Products', icon: Package, color: 'text-purple-600 bg-purple-50' },
-  { key: 'recipes', label: 'สูตรการผลิต (BOM)', subLabel: 'Recipes', icon: FlaskConical, color: 'text-pink-600 bg-pink-50' },
-  { key: 'orders', label: 'คำสั่งผลิต & ใบเบิก', subLabel: 'Production Orders', icon: Calculator, color: 'text-indigo-600 bg-indigo-50' },
-  { key: 'sections', label: 'โซนคลังสินค้า', subLabel: 'Sections', icon: MapPin, color: 'text-teal-600 bg-teal-50' },
+  { key: 'materials', label: 'วัตถุดิบ', subLabel: 'Materials', icon: Package, color: 'text-blue-400 bg-blue-950/50 border-blue-900/50', badgeColor: 'bg-blue-900/60 text-blue-300 border-blue-700/50' },
+  { key: 'lots', label: 'ล็อต & วันหมดอายุ', subLabel: 'Lots & EXP', icon: Layers, color: 'text-emerald-400 bg-emerald-950/50 border-emerald-900/50', badgeColor: 'bg-emerald-900/60 text-emerald-300 border-emerald-700/50' },
+  { key: 'transactions', label: 'ประวัติรับ-จ่าย', subLabel: 'Transactions', icon: History, color: 'text-amber-400 bg-amber-950/50 border-amber-900/50', badgeColor: 'bg-amber-900/60 text-amber-300 border-amber-700/50' },
+  { key: 'products', label: 'สินค้าที่ผลิต', subLabel: 'Products', icon: Package, color: 'text-purple-400 bg-purple-950/50 border-purple-900/50', badgeColor: 'bg-purple-900/60 text-purple-300 border-purple-700/50' },
+  { key: 'recipes', label: 'สูตรผลิต (BOM)', subLabel: 'Recipes', icon: FlaskConical, color: 'text-pink-400 bg-pink-950/50 border-pink-900/50', badgeColor: 'bg-pink-900/60 text-pink-300 border-pink-700/50' },
+  { key: 'orders', label: 'คำสั่งผลิต & ใบเบิก', subLabel: 'Orders', icon: Calculator, color: 'text-indigo-400 bg-indigo-950/50 border-indigo-900/50', badgeColor: 'bg-indigo-900/60 text-indigo-300 border-indigo-700/50' },
+  { key: 'sections', label: 'โซนคลัง', subLabel: 'Sections', icon: MapPin, color: 'text-teal-400 bg-teal-950/50 border-teal-900/50', badgeColor: 'bg-teal-900/60 text-teal-300 border-teal-700/50' },
+  { key: 'auditLogs', label: 'ประวัติการแก้ไข DB', subLabel: 'Audit Logs', icon: ShieldCheck, color: 'text-rose-400 bg-rose-950/50 border-rose-900/50', badgeColor: 'bg-rose-900/60 text-rose-300 border-rose-700/50' },
 ];
 
 export default function DBStudioPage() {
@@ -54,6 +62,7 @@ export default function DBStudioPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [deletingRecord, setDeletingRecord] = useState<any | null>(null);
+  const [viewingAuditLog, setViewingAuditLog] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -126,16 +135,16 @@ export default function DBStudioPage() {
       });
 
       if (res.ok) {
-        showNotification('success', 'บันทึกการแก้ไขข้อมูลเรียบร้อยแล้ว');
+        showNotification('success', 'บันทึกการแก้ไขลงฐานข้อมูล และบันทึกประวัติ (Audit Log) เรียบร้อยแล้ว');
         setEditingRecord(null);
         fetchRecords(activeTable, search);
         fetchStats();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         showNotification('error', err.error || 'เกิดข้อผิดพลาดในการบันทึก');
       }
     } catch (e: any) {
-      showNotification('error', e.message || 'บันทึกข้อมูลไม่สำเร็จ');
+      showNotification('error', e?.message || 'บันทึกข้อมูลไม่สำเร็จ');
     } finally {
       setIsSaving(false);
     }
@@ -149,101 +158,118 @@ export default function DBStudioPage() {
         method: 'DELETE',
       });
       if (res.ok) {
-        showNotification('success', 'ลบข้อมูลสำเร็จ');
+        showNotification('success', 'ลบข้อมูลสำเร็จ และบันทึกประวัติการลบเรียบร้อยแล้ว');
         setDeletingRecord(null);
         fetchRecords(activeTable, search);
         fetchStats();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         showNotification('error', err.error || 'ไม่สามารถลบข้อมูลได้ (อาจมีข้อมูลอื่นเชื่อมโยงอยู่)');
       }
     } catch (e: any) {
-      showNotification('error', e.message || 'เกิดข้อผิดพลาดในการลบข้อมูล');
+      showNotification('error', e?.message || 'เกิดข้อผิดพลาดในการลบข้อมูล');
     }
   };
 
   // Export JSON
   const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(records, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${activeTable}_backup_${new Date().toISOString().slice(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    showNotification('success', `ส่งออกไฟล์ ${activeTable}.json เรียบร้อยแล้ว`);
+    try {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(records, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', dataStr);
+      downloadAnchor.setAttribute('download', `${activeTable}_backup_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showNotification('success', `ส่งออกไฟล์ ${activeTable}.json เรียบร้อยแล้ว`);
+    } catch (e: any) {
+      showNotification('error', 'ไม่สามารถส่งออกไฟล์ได้: ' + (e?.message || ''));
+    }
   };
 
   const activeMeta = useMemo(() => TABLES.find((t) => t.key === activeTable) || TABLES[0], [activeTable]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Banner & Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-950 text-slate-100 -m-4 sm:-m-6 md:-m-8 p-4 sm:p-6 md:p-8 space-y-6">
+      {/* Backoffice Dark Top Bar */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-200">
-              <Database className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 border border-blue-400/30">
+              <Terminal className="w-5 h-5 text-blue-100" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                DB Studio (จัดการฐานข้อมูล)
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200 inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Connected
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-lg font-mono font-bold text-white flex items-center gap-2">
+                  <span>DB STUDIO CONSOLE</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                    BACKOFFICE MODE
+                  </span>
+                </h1>
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-semibold border border-emerald-800/80 inline-flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  LIVE CONNECTED
                 </span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                ศูนย์ตรวจสอบและแก้ไขข้อมูลหลังบ้าน เข้าใจง่าย ปลอดภัย สำหรับผู้ดูแลระบบ (Admin)
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5 font-sans">
+                ระบบจัดการฐานข้อมูลหลังบ้าน ตรวจสอบ ย้อนดูประวัติ และแก้ไขข้อมูล KMP Production
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => {
               fetchRecords(activeTable, search);
               fetchStats();
             }}
             disabled={isLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-mono font-semibold transition active:scale-95"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>รีเฟรช</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>SYNC DATA</span>
           </button>
 
           <button
             onClick={handleExportJSON}
             disabled={records.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition shadow-sm"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-mono font-semibold transition active:scale-95"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>สำรองข้อมูล JSON</span>
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span>EXPORT JSON</span>
           </button>
+
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white rounded-xl text-xs font-medium transition"
+          >
+            <span>ออกจากหลังบ้าน</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </div>
 
-      {/* Notification toast */}
+      {/* Notification Toast */}
       {notification && (
         <div
-          className={`p-4 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-all ${
+          className={`p-4 rounded-xl text-xs font-semibold flex items-center gap-2.5 border shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 ${
             notification.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border border-red-200 text-red-800'
+              ? 'bg-emerald-950/90 border-emerald-800 text-emerald-300'
+              : 'bg-rose-950/90 border-rose-800 text-rose-300'
           }`}
         >
           {notification.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           ) : (
-            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           )}
           <span>{notification.message}</span>
         </div>
       )}
 
-      {/* Table Selector Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      {/* Table Selector Tabs (Backoffice Dark Style) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {TABLES.map((t) => {
           const Icon = t.icon;
           const isSelected = activeTable === t.key;
@@ -256,20 +282,22 @@ export default function DBStudioPage() {
                 setActiveTable(t.key);
                 setSearch('');
               }}
-              className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+              className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between relative overflow-hidden ${
                 isSelected
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200'
-                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+                  ? 'bg-gradient-to-b from-blue-600 to-indigo-700 text-white border-blue-400/50 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/40'
+                  : 'bg-slate-900/70 hover:bg-slate-800/80 border-slate-800 text-slate-300 hover:border-slate-700'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-white/20 text-white' : t.color}`}>
+                <div className={`p-1.5 rounded-lg border ${isSelected ? 'bg-white/20 text-white border-white/20' : t.color}`}>
                   <Icon className="w-4 h-4" />
                 </div>
                 {count !== null && (
                   <span
-                    className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                      isSelected
+                        ? 'bg-white/20 text-white border-white/30'
+                        : t.badgeColor
                     }`}
                   >
                     {count}
@@ -277,10 +305,10 @@ export default function DBStudioPage() {
                 )}
               </div>
               <div>
-                <p className={`text-xs font-bold leading-tight ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                <p className={`text-xs font-bold leading-tight ${isSelected ? 'text-white' : 'text-slate-200'}`}>
                   {t.label}
                 </p>
-                <p className={`text-[10px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                <p className={`text-[10px] font-mono truncate mt-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                   {t.subLabel}
                 </p>
               </div>
@@ -289,73 +317,99 @@ export default function DBStudioPage() {
         })}
       </div>
 
-      {/* Main Table Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Search & Actions Subheader */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-700">กำลังดูตาราง:</span>
-            <span className="text-xs px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg font-bold">
+      {/* Main Console View Card */}
+      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
+        {/* Search & Meta Controls Header */}
+        <div className="p-4 border-b border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs font-mono text-slate-400">TABLE:</span>
+            <span className="text-xs px-2.5 py-1 bg-blue-950 text-blue-300 border border-blue-800/80 rounded-lg font-mono font-bold">
               {activeMeta.label} ({activeMeta.subLabel})
             </span>
-            <span className="text-xs text-slate-500">
-              พบ {records.length} รายการ
+            <span className="text-xs font-mono text-slate-500">
+              [{records.length} RECORDS]
             </span>
+            {activeTable === 'auditLogs' && (
+              <span className="text-[11px] px-2 py-0.5 bg-rose-950/80 text-rose-400 border border-rose-800/80 rounded-full font-semibold flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                ระบบบันทึกประวัติอัตโนมัติ
+              </span>
+            )}
           </div>
 
-          <form onSubmit={handleSearchSubmit} className="relative flex items-center w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3" />
+          <form onSubmit={handleSearchSubmit} className="relative flex items-center w-full sm:w-80">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3" />
             <input
               type="text"
               placeholder={`ค้นหาใน ${activeMeta.label}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-700/80 text-white rounded-xl placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition font-sans"
             />
           </form>
         </div>
 
-        {/* Data Table View */}
+        {/* Data Table */}
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-              กำลังโหลดข้อมูล...
+            <div className="p-16 text-center text-slate-500 text-xs font-mono">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-blue-400" />
+              LOADING DATABASE RECORDS...
             </div>
           ) : records.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              <Database className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              ไม่พบข้อมูลในตารางนี้ {search && `(คำค้นหา: "${search}")`}
+            <div className="p-16 text-center text-slate-500 text-xs font-mono">
+              <Database className="w-8 h-8 mx-auto mb-3 text-slate-700" />
+              NO RECORDS FOUND IN [{activeMeta.subLabel.toUpperCase()}]{search && ` FOR QUERY "${search}"`}
             </div>
           ) : (
             <table className="w-full text-xs text-left border-collapse">
               <thead>
-                <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 font-bold">
+                <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono text-[11px] uppercase tracking-wider">
                   {renderTableHeaders(activeTable)}
-                  <th className="py-2.5 px-3 text-center w-28">จัดการ</th>
+                  <th className="py-2.5 px-3 text-center w-28">ACTIONS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-800/60 font-sans">
                 {records.map((record) => (
-                  <tr key={record.id} className="hover:bg-blue-50/30 transition-colors">
-                    {renderTableCells(activeTable, record)}
+                  <tr key={record.id} className="hover:bg-slate-800/40 transition-colors">
+                    {renderTableCells(activeTable, record, setViewingAuditLog)}
                     <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => setEditingRecord({ ...record })}
-                          className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                          title="แก้ไขข้อมูล"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeletingRecord(record)}
-                          className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition"
-                          title="ลบข้อมูล"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {activeTable === 'auditLogs' ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setViewingAuditLog(record)}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg text-[11px] font-mono transition border border-slate-700"
+                            title="ดูรายละเอียดการเปลี่ยนแปลง"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>ดู Diff</span>
+                          </button>
+                          <button
+                            onClick={() => setDeletingRecord(record)}
+                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-950/50 rounded-lg transition"
+                            title="ลบ Log นี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setEditingRecord({ ...record })}
+                            className="p-1.5 text-blue-400 hover:bg-blue-950/60 hover:text-blue-300 rounded-lg transition border border-transparent hover:border-blue-800/50"
+                            title="แก้ไขข้อมูลในฐานข้อมูล"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingRecord(record)}
+                            className="p-1.5 text-rose-400 hover:bg-rose-950/60 hover:text-rose-300 rounded-lg transition border border-transparent hover:border-rose-800/50"
+                            title="ลบข้อมูลออกจากฐานข้อมูล"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -365,43 +419,144 @@ export default function DBStudioPage() {
         </div>
       </div>
 
-      {/* Admin Help & Local Studio Guide */}
-      <div className="bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border border-blue-200/60 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Admin Safety & Audit Guide Card */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
-          <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <ShieldAlert className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <div className="text-xs space-y-1">
-            <h3 className="font-bold text-blue-950">คำแนะนำสำหรับผู้ดูแลระบบ</h3>
-            <p className="text-blue-800/80">
-              หน้านี้ถูกออกแบบมาให้ผู้ดูแลแก้ไขและตรวจสอบข้อมูลได้ทันทีผ่านเว็บไซต์ทั้งแบบออนไลน์ (Vercel) และในเครื่อง
-              โดยระบบจะบันทึกตรงเข้าสู่ฐานข้อมูลหลักอย่างปลอดภัย
+            <h3 className="font-bold text-slate-200 flex items-center gap-2">
+              <span>ความปลอดภัยและการตรวจสอบย้อนหลัง (Audit Log Guard)</span>
+              <span className="text-[10px] px-2 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                ACTIVE
+              </span>
+            </h3>
+            <p className="text-slate-400 leading-relaxed">
+              ทุกการกดแก้ไข (PUT) หรือการลบ (DELETE) ใน DB Studio จะถูกบันทึกประวัติ วันเวลา และค่าเดิม-ค่าใหม่ ลงในตาราง
+              <strong className="text-rose-400 font-mono ml-1">AuditLog</strong> อัตโนมัติ เพื่อให้ผู้ดูแลตรวจสอบย้อนหลังได้ทุกจุด
             </p>
           </div>
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
-          <span className="text-[11px] font-mono text-slate-600 bg-white/80 border border-slate-200 px-3 py-1.5 rounded-lg">
-            Local CLI: <strong className="text-blue-700">npm run db:studio</strong>
-          </span>
+          <button
+            onClick={() => {
+              setActiveTable('auditLogs');
+              setSearch('');
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800 text-rose-300 rounded-xl text-xs font-semibold transition"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>ดูประวัติการแก้ไขทั้งหมด</span>
+          </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* EDIT MODAL DIALOG                                                        */}
+      {/* AUDIT LOG DIFF VIEWER MODAL                                              */}
+      {/* ========================================================================= */}
+      {viewingAuditLog && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-slate-100">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-1.5 rounded-lg border ${
+                  viewingAuditLog.action === 'DELETE'
+                    ? 'bg-rose-950 text-rose-400 border-rose-800'
+                    : 'bg-amber-950 text-amber-400 border-amber-800'
+                }`}>
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white font-mono flex items-center gap-2">
+                    <span>AUDIT DETAIL: [{viewingAuditLog.action}]</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-normal">
+                      {viewingAuditLog.tableName}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    บันทึกเมื่อ: {formatDateTime(viewingAuditLog.createdAt)} โดย {viewingAuditLog.changedBy || 'Admin'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingAuditLog(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto font-sans">
+              {/* Summary Banner */}
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                <span className="text-[11px] font-mono text-slate-500 block mb-1">คำอธิบายการเปลี่ยนแปลง:</span>
+                <p className="text-xs font-semibold text-slate-200">
+                  {viewingAuditLog.summary || 'ไม่มีคำอธิบาย'}
+                </p>
+                <p className="text-[11px] font-mono text-slate-400 mt-1">
+                  Record ID: <span className="text-blue-400">{viewingAuditLog.recordId}</span>
+                </p>
+              </div>
+
+              {/* Side-by-side or Stacked Diff */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Old Data */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-rose-400 px-1">
+                    <span>ค่าเดิม (BEFORE)</span>
+                    <span className="text-[10px] bg-rose-950 px-1.5 py-0.5 rounded border border-rose-900">OLD</span>
+                  </div>
+                  <pre className="p-3 bg-slate-950 border border-rose-900/40 rounded-xl text-[11px] font-mono text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap break-words">
+                    {formatJSON(viewingAuditLog.oldData)}
+                  </pre>
+                </div>
+
+                {/* New Data */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-emerald-400 px-1">
+                    <span>ค่าใหม่ (AFTER)</span>
+                    <span className="text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-900">NEW</span>
+                  </div>
+                  <pre className="p-3 bg-slate-950 border border-emerald-900/40 rounded-xl text-[11px] font-mono text-slate-300 overflow-x-auto max-h-64 whitespace-pre-wrap break-words">
+                    {formatJSON(viewingAuditLog.newData)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingAuditLog(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* EDIT MODAL DIALOG (Dark Theme)                                           */}
       {/* ========================================================================= */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-slate-100">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-blue-600" />
-                <h3 className="font-bold text-sm text-slate-900">
-                  แก้ไขข้อมูล: {activeMeta.label}
+                <Edit2 className="w-4 h-4 text-blue-400" />
+                <h3 className="font-bold text-sm text-white font-mono">
+                  EDIT RECORD: {activeMeta.label}
                 </h3>
               </div>
               <button
                 onClick={() => setEditingRecord(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -409,21 +564,21 @@ export default function DBStudioPage() {
 
             {/* Modal Form Content */}
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>การแก้ไขจะมีผลต่อการคำนวณและสต็อกสินค้า กรุณาตรวจสอบความถูกต้องก่อนบันทึก</span>
+              <div className="p-3 bg-amber-950/60 border border-amber-800/80 rounded-xl text-[11px] text-amber-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>การแก้ไขจะมีผลต่อฐานข้อมูลทันที และระบบจะบันทึก Log การเปลี่ยนแปลงให้อัตโนมัติ</span>
               </div>
 
               {renderEditFormFields(activeTable, editingRecord, setEditingRecord)}
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEditingRecord(null)}
                 disabled={isSaving}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition"
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-800 rounded-xl transition"
               >
                 ยกเลิก
               </button>
@@ -431,7 +586,7 @@ export default function DBStudioPage() {
                 type="button"
                 onClick={handleSaveEdit}
                 disabled={isSaving}
-                className="inline-flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-blue-200"
+                className="inline-flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-blue-500/20"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>{isSaving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}</span>
@@ -442,35 +597,35 @@ export default function DBStudioPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* DELETE CONFIRMATION MODAL                                                */}
+      {/* DELETE CONFIRMATION MODAL (Dark Theme)                                   */}
       {/* ========================================================================= */}
       {deletingRecord && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl max-w-sm w-full border border-slate-700 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-100">
+            <div className="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-800/80 text-rose-400 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
 
             <div className="text-center space-y-1">
-              <h3 className="font-bold text-slate-900 text-base">ยืนยันการลบข้อมูล?</h3>
-              <p className="text-xs text-slate-500">
-                คุณกำลังจะลบรายการในตาราง <strong>{activeMeta.label}</strong> (ID: {String(deletingRecord?.id || '').slice(0, 8)}...)
+              <h3 className="font-bold text-white text-base">ยืนยันการลบข้อมูล?</h3>
+              <p className="text-xs text-slate-400">
+                คุณกำลังจะลบรายการในตาราง <strong className="text-white">{activeMeta.label}</strong> (ID: {String(deletingRecord?.id || '').slice(0, 8)}...)
               </p>
-              <p className="text-[11px] text-red-600 font-semibold pt-1">
-                ⚠️ ข้อมูลที่ถูกลบจะไม่สามารถกู้คืนได้ และหากมีรายการอ้างอิงอยู่ระบบจะปฏิเสธการลบ
+              <p className="text-[11px] text-rose-400 font-semibold pt-1">
+                ⚠️ การลบจะถูกบันทึกประวัติใน Audit Log เพื่อให้ตรวจสอบย้อนหลังได้
               </p>
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 onClick={() => setDeletingRecord(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-800 rounded-xl transition"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-red-200"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-rose-600/20"
               >
                 ยืนยันการลบ
               </button>
@@ -480,6 +635,17 @@ export default function DBStudioPage() {
       )}
     </div>
   );
+}
+
+// Helpers: JSON formatting for diff view
+function formatJSON(raw: any): string {
+  if (!raw) return 'ไม่มีข้อมูล (NULL)';
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return String(raw);
+  }
 }
 
 // Safe number formatting helper
@@ -544,7 +710,7 @@ function renderTableHeaders(table: TableKey) {
           <th className="py-2.5 px-3">รหัสสินค้า</th>
           <th className="py-2.5 px-3">ชื่อสินค้าที่ผลิต</th>
           <th className="py-2.5 px-3 text-center">หน่วยนับ</th>
-          <th className="py-2.5 px-3 text-center">จำนวนสูตร (BOM)</th>
+          <th className="py-2.5 px-3 text-center">สูตร (BOM)</th>
           <th className="py-2.5 px-3 text-center">ประวัติผลิต</th>
         </>
       );
@@ -575,25 +741,35 @@ function renderTableHeaders(table: TableKey) {
           <th className="py-2.5 px-3">รหัสโซน</th>
           <th className="py-2.5 px-3">ชื่อโซน</th>
           <th className="py-2.5 px-3">คำอธิบาย</th>
-          <th className="py-2.5 px-3 text-center">จำนวนวัตถุดิบในโซน</th>
+          <th className="py-2.5 px-3 text-center">วัตถุดิบในโซน</th>
+        </>
+      );
+    case 'auditLogs':
+      return (
+        <>
+          <th className="py-2.5 px-3">วัน-เวลาแก้ไข</th>
+          <th className="py-2.5 px-3 text-center">แอ็กชัน</th>
+          <th className="py-2.5 px-3">ตาราง (Table)</th>
+          <th className="py-2.5 px-3">รายละเอียดการแก้ไข</th>
+          <th className="py-2.5 px-3">ผู้แก้ไข</th>
         </>
       );
   }
 }
 
-// Helpers: Render Table Cells
-function renderTableCells(table: TableKey, record: any) {
+// Helpers: Render Table Cells (Dark Theme)
+function renderTableCells(table: TableKey, record: any, onInspectAudit?: (log: any) => void) {
   if (!record) return null;
 
   switch (table) {
     case 'materials': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{record.code || '-'}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
-          <td className="py-2.5 px-3 text-slate-600">{record.section?.name || '-'}</td>
-          <td className="py-2.5 px-3 text-center text-slate-700">{record.baseUnit || 'kg'}</td>
-          <td className="py-2.5 px-3 text-right font-mono">{safeNumber(record.minSafetyStock, 0)}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-100">{record.name || '-'}</td>
+          <td className="py-2.5 px-3 text-slate-400">{record.section?.name || '-'}</td>
+          <td className="py-2.5 px-3 text-center text-slate-300 font-mono">{record.baseUnit || 'kg'}</td>
+          <td className="py-2.5 px-3 text-right font-mono text-slate-300">{safeNumber(record.minSafetyStock, 0)}</td>
         </>
       );
     }
@@ -604,33 +780,33 @@ function renderTableCells(table: TableKey, record: any) {
 
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{record.lotNumber || '-'}</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-slate-100">{record.lotNumber || '-'}</td>
           <td className="py-2.5 px-3">
-            <span className="font-semibold text-slate-800">{record.material?.name || '-'}</span>
-            <span className="text-[10px] text-slate-400 block font-mono">{record.material?.code || ''}</span>
+            <span className="font-semibold text-slate-200">{record.material?.name || '-'}</span>
+            <span className="text-[10px] text-slate-500 block font-mono">{record.material?.code || ''}</span>
           </td>
-          <td className="py-2.5 px-3 text-slate-600">{formatDate(record.receiveDate)}</td>
+          <td className="py-2.5 px-3 text-slate-400 font-mono">{formatDate(record.receiveDate)}</td>
           <td className="py-2.5 px-3 font-mono">
             {record.expDate ? (
-              <span className={isExpired ? 'text-red-600 font-bold' : 'text-slate-700'}>
+              <span className={isExpired ? 'text-rose-400 font-bold' : 'text-slate-300'}>
                 {formatDate(record.expDate)}
               </span>
             ) : (
               '-'
             )}
           </td>
-          <td className="py-2.5 px-3 text-right font-mono text-slate-500">
+          <td className="py-2.5 px-3 text-right font-mono text-slate-400">
             {safeNumber(record.initialQuantity)} {baseUnit}
           </td>
-          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">
             {safeNumber(record.quantityRemaining)} {baseUnit}
           </td>
           <td className="py-2.5 px-3 text-center">
             <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                 record.status === 'ACTIVE'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-slate-100 text-slate-600'
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}
             >
               {record.status || 'ACTIVE'}
@@ -645,94 +821,122 @@ function renderTableCells(table: TableKey, record: any) {
 
       return (
         <>
-          <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">{formatDate(record.transactionDate)}</td>
+          <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono">{formatDate(record.transactionDate)}</td>
           <td className="py-2.5 px-3 text-center">
             <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                 isPositive
-                  ? 'bg-emerald-100 text-emerald-800'
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
                   : record.type === 'PRODUCTION_ISSUE'
-                  ? 'bg-orange-100 text-orange-800'
-                  : 'bg-blue-100 text-blue-800'
+                  ? 'bg-amber-950/80 text-amber-400 border-amber-800'
+                  : 'bg-blue-950/80 text-blue-400 border-blue-800'
               }`}
             >
               {record.type || 'TX'}
             </span>
           </td>
-          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material?.name || '-'}</td>
-          <td className="py-2.5 px-3 font-mono text-xs">{record.lot?.lotNumber || '-'}</td>
+          <td className="py-2.5 px-3 font-medium text-slate-200">{record.material?.name || '-'}</td>
+          <td className="py-2.5 px-3 font-mono text-xs text-slate-400">{record.lot?.lotNumber || '-'}</td>
           <td className="py-2.5 px-3 text-right font-mono font-bold">
-            <span className={isPositive ? 'text-emerald-600' : 'text-slate-900'}>
+            <span className={isPositive ? 'text-emerald-400' : 'text-slate-200'}>
               {isPositive ? '+' : '-'}{safeNumber(Math.abs(Number(record.quantity) || 0))} {baseUnit}
             </span>
           </td>
-          <td className="py-2.5 px-3 font-mono text-xs text-blue-700">{record.documentRef || '-'}</td>
-          <td className="py-2.5 px-3 text-slate-500 truncate max-w-xs">{record.remarks || '-'}</td>
+          <td className="py-2.5 px-3 font-mono text-xs text-blue-400">{record.documentRef || '-'}</td>
+          <td className="py-2.5 px-3 text-slate-400 truncate max-w-xs">{record.remarks || '-'}</td>
         </>
       );
     }
     case 'products': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-purple-700">{record.code || '-'}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
-          <td className="py-2.5 px-3 text-center text-slate-700">{record.unit || 'ชิ้น'}</td>
-          <td className="py-2.5 px-3 text-center font-mono">{record._count?.recipeItems ?? 0} รายการ</td>
-          <td className="py-2.5 px-3 text-center font-mono">{record._count?.productionOrders ?? 0} ครั้ง</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-purple-400">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-100">{record.name || '-'}</td>
+          <td className="py-2.5 px-3 text-center text-slate-400 font-mono">{record.unit || 'ชิ้น'}</td>
+          <td className="py-2.5 px-3 text-center font-mono text-slate-300">{record._count?.recipeItems ?? 0} รายการ</td>
+          <td className="py-2.5 px-3 text-center font-mono text-slate-300">{record._count?.productionOrders ?? 0} ครั้ง</td>
         </>
       );
     }
     case 'recipes': {
       return (
         <>
-          <td className="py-2.5 px-3 font-semibold text-purple-900">{record.product?.name || '-'}</td>
-          <td className="py-2.5 px-3 font-medium text-slate-800">{record.material?.name || '-'}</td>
-          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+          <td className="py-2.5 px-3 font-semibold text-purple-300">{record.product?.name || '-'}</td>
+          <td className="py-2.5 px-3 font-medium text-slate-200">{record.material?.name || '-'}</td>
+          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-100">
             {safeNumber(record.quantityRequired)}
           </td>
-          <td className="py-2.5 px-3 text-center text-slate-600">{record.unit || 'kg'}</td>
-          <td className="py-2.5 px-3 text-slate-500">{record.notes || '-'}</td>
+          <td className="py-2.5 px-3 text-center text-slate-400 font-mono">{record.unit || 'kg'}</td>
+          <td className="py-2.5 px-3 text-slate-400">{record.notes || '-'}</td>
         </>
       );
     }
     case 'orders': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{record.orderNo || '-'}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-800">{record.product?.name || '-'}</td>
-          <td className="py-2.5 px-3 text-right font-mono font-bold">
+          <td className="py-2.5 px-3 font-mono font-bold text-indigo-400">{record.orderNo || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-200">{record.product?.name || '-'}</td>
+          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-100">
             {safeNumber(record.targetQuantity)} {record.product?.unit || 'ชิ้น'}
           </td>
           <td className="py-2.5 px-3 text-center">
             <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                 record.status === 'COMPLETED'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-800'
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                  : 'bg-amber-950/80 text-amber-400 border-amber-800'
               }`}
             >
               {record.status || 'PENDING'}
             </span>
           </td>
-          <td className="py-2.5 px-3 text-slate-600">{formatDate(record.createdAt)}</td>
-          <td className="py-2.5 px-3 text-slate-500 truncate max-w-xs">{record.notes || '-'}</td>
+          <td className="py-2.5 px-3 text-slate-400 font-mono">{formatDate(record.createdAt)}</td>
+          <td className="py-2.5 px-3 text-slate-400 truncate max-w-xs">{record.notes || '-'}</td>
         </>
       );
     }
     case 'sections': {
       return (
         <>
-          <td className="py-2.5 px-3 font-mono font-bold text-teal-700">{record.code || '-'}</td>
-          <td className="py-2.5 px-3 font-semibold text-slate-900">{record.name || '-'}</td>
-          <td className="py-2.5 px-3 text-slate-500">{record.description || '-'}</td>
-          <td className="py-2.5 px-3 text-center font-mono">{record._count?.materials ?? 0} รายการ</td>
+          <td className="py-2.5 px-3 font-mono font-bold text-teal-400">{record.code || '-'}</td>
+          <td className="py-2.5 px-3 font-semibold text-slate-100">{record.name || '-'}</td>
+          <td className="py-2.5 px-3 text-slate-400">{record.description || '-'}</td>
+          <td className="py-2.5 px-3 text-center font-mono text-slate-300">{record._count?.materials ?? 0} รายการ</td>
+        </>
+      );
+    }
+    case 'auditLogs': {
+      const isDelete = record.action === 'DELETE';
+      return (
+        <>
+          <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap font-mono text-xs">
+            {formatDateTime(record.createdAt)}
+          </td>
+          <td className="py-2.5 px-3 text-center">
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                isDelete
+                  ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                  : 'bg-amber-950/80 text-amber-400 border-amber-800'
+              }`}
+            >
+              {record.action || 'UPDATE'}
+            </span>
+          </td>
+          <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{record.tableName || '-'}</td>
+          <td className="py-2.5 px-3 text-slate-200">
+            <div className="flex items-center gap-2">
+              <span className="truncate max-w-sm">{record.summary || '-'}</span>
+            </div>
+          </td>
+          <td className="py-2.5 px-3 text-slate-400 text-xs font-mono">{record.changedBy || 'Admin'}</td>
         </>
       );
     }
   }
 }
 
-// Helpers: Render Edit Form Fields
+// Helpers: Render Edit Form Fields (Dark Theme)
 function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dispatch<React.SetStateAction<any>>) {
   const updateField = (field: string, val: any) => {
     setRecord((prev: any) => ({ ...prev, [field]: val }));
@@ -741,42 +945,42 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
   switch (table) {
     case 'materials':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">รหัสวัตถุดิบ (Code):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">รหัสวัตถุดิบ (Code):</label>
             <input
               type="text"
               value={record.code || ''}
               onChange={(e) => updateField('code', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-blue-700"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อวัตถุดิบ (Name):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">ชื่อวัตถุดิบ (Name):</label>
             <input
               type="text"
               value={record.name || ''}
               onChange={(e) => updateField('name', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-bold"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-bold text-white focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">หน่วยนับหลัก (Base Unit):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">หน่วยนับหลัก (Base Unit):</label>
               <input
                 type="text"
                 value={record.baseUnit || ''}
                 onChange={(e) => updateField('baseUnit', e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">จุดเตือนสต็อกต่ำ (Min Safety):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">จุดเตือนสต็อกต่ำ (Min Safety):</label>
               <input
                 type="number"
                 value={record.minSafetyStock ?? 0}
                 onChange={(e) => updateField('minSafetyStock', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono text-slate-200 focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -785,58 +989,58 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'lots':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">เลขล็อต (Lot Number):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">เลขล็อต (Lot Number):</label>
             <input
               type="text"
               value={record.lotNumber || ''}
               onChange={(e) => updateField('lotNumber', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-white focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ยอดคงเหลือ (Remaining):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">ยอดคงเหลือ (Remaining):</label>
               <input
                 type="number"
                 step="any"
                 value={record.quantityRemaining ?? 0}
                 onChange={(e) => updateField('quantityRemaining', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-emerald-700"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ยอดรับแรกเริ่ม (Initial):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">ยอดรับแรกเริ่ม (Initial):</label>
               <input
                 type="number"
                 step="any"
                 value={record.initialQuantity ?? 0}
                 onChange={(e) => updateField('initialQuantity', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono text-slate-300 focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">วันหมดอายุ (EXP):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">วันหมดอายุ (EXP):</label>
               <input
                 type="date"
                 value={safeDateToInput(record.expDate)}
                 onChange={(e) => updateField('expDate', e.target.value ? new Date(e.target.value) : null)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">สถานะล็อต (Status):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">สถานะล็อต (Status):</label>
               <select
                 value={record.status || 'ACTIVE'}
                 onChange={(e) => updateField('status', e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-bold"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 font-bold focus:outline-none focus:border-blue-500"
               >
                 <option value="ACTIVE">ACTIVE (ปกติ)</option>
                 <option value="EXPIRED">EXPIRED (หมดอายุ)</option>
-                <option value="DEPLETED">DEPLETED (หมดแล้ว)</option>
+                <option value="EXHAUSTED">EXHAUSTED (หมดแล้ว)</option>
                 <option value="HOLD">HOLD (กักกัน/ตรวจสอบ)</option>
               </select>
             </div>
@@ -846,33 +1050,33 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'transactions':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">เลขที่เอกสารอ้างอิง (Doc Ref):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">เลขที่เอกสารอ้างอิง (Doc Ref):</label>
             <input
               type="text"
               value={record.documentRef || ''}
               onChange={(e) => updateField('documentRef', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono text-blue-700"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono text-blue-400 focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">จำนวน (Quantity):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">จำนวน (Quantity):</label>
               <input
                 type="number"
                 step="any"
                 value={record.quantity ?? 0}
                 onChange={(e) => updateField('quantity', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-slate-100 focus:outline-none focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ประเภท (Type):</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">ประเภท (Type):</label>
               <select
                 value={record.type || 'INBOUND'}
                 onChange={(e) => updateField('type', e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-bold"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 font-bold focus:outline-none focus:border-blue-500"
               >
                 <option value="INBOUND">INBOUND (รับเข้า)</option>
                 <option value="PRODUCTION_ISSUE">PRODUCTION_ISSUE (เบิกผลิต)</option>
@@ -882,12 +1086,12 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ (Remarks):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">หมายเหตุ (Remarks):</label>
             <input
               type="text"
               value={record.remarks || ''}
               onChange={(e) => updateField('remarks', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500"
             />
           </div>
         </div>
@@ -895,32 +1099,32 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'products':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">รหัสสินค้า (Code):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">รหัสสินค้า (Code):</label>
             <input
               type="text"
               value={record.code || ''}
               onChange={(e) => updateField('code', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-purple-700"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-purple-400 focus:outline-none focus:border-purple-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อสินค้า (Name):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">ชื่อสินค้า (Name):</label>
             <input
               type="text"
               value={record.name || ''}
               onChange={(e) => updateField('name', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-bold"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-bold text-white focus:outline-none focus:border-purple-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หน่วยนับ (Unit):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">หน่วยนับ (Unit):</label>
             <input
               type="text"
               value={record.unit || ''}
               onChange={(e) => updateField('unit', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-purple-500"
             />
           </div>
         </div>
@@ -928,33 +1132,33 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'recipes':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ปริมาณที่ใช้ตามสูตร:</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">ปริมาณที่ใช้ตามสูตร:</label>
             <input
               type="number"
               step="any"
               value={record.quantityRequired ?? 0}
               onChange={(e) => updateField('quantityRequired', parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-white focus:outline-none focus:border-pink-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หน่วยนับ:</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">หน่วยนับ:</label>
             <input
               type="text"
               value={record.unit || ''}
               onChange={(e) => updateField('unit', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-pink-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ:</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">หมายเหตุ:</label>
             <input
               type="text"
               value={record.notes || ''}
               onChange={(e) => updateField('notes', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-pink-500"
             />
           </div>
         </div>
@@ -962,33 +1166,33 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'orders':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">เลขที่คำสั่งผลิต (Order No):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">เลขที่คำสั่งผลิต (Order No):</label>
             <input
               type="text"
               value={record.orderNo || ''}
               onChange={(e) => updateField('orderNo', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-indigo-700"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-indigo-400 focus:outline-none focus:border-indigo-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ยอดผลิตเป้าหมาย:</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">ยอดผลิตเป้าหมาย:</label>
               <input
                 type="number"
                 step="any"
                 value={record.targetQuantity ?? 0}
                 onChange={(e) => updateField('targetQuantity', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">สถานะ:</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">สถานะ:</label>
               <select
                 value={record.status || 'COMPLETED'}
                 onChange={(e) => updateField('status', e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white font-bold"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 font-bold focus:outline-none focus:border-indigo-500"
               >
                 <option value="DRAFT">DRAFT (ร่าง)</option>
                 <option value="CONFIRMED">CONFIRMED (ยืนยันแล้ว)</option>
@@ -998,12 +1202,12 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ / รุ่นการผลิต:</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">หมายเหตุ / รุ่นการผลิต:</label>
             <input
               type="text"
               value={record.notes || ''}
               onChange={(e) => updateField('notes', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
         </div>
@@ -1011,34 +1215,41 @@ function renderEditFormFields(table: TableKey, record: any, setRecord: React.Dis
 
     case 'sections':
       return (
-        <div className="space-y-3">
+        <div className="space-y-3 font-sans">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">รหัสโซน (Code):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">รหัสโซน (Code):</label>
             <input
               type="text"
               value={record.code || ''}
               onChange={(e) => updateField('code', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-mono font-bold text-teal-700"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-mono font-bold text-teal-400 focus:outline-none focus:border-teal-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อโซน (Name):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">ชื่อโซน (Name):</label>
             <input
               type="text"
               value={record.name || ''}
               onChange={(e) => updateField('name', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-bold"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl font-bold text-white focus:outline-none focus:border-teal-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">รายละเอียด (Description):</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">รายละเอียด (Description):</label>
             <input
               type="text"
               value={record.description || ''}
               onChange={(e) => updateField('description', e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:outline-none focus:border-teal-500"
             />
           </div>
+        </div>
+      );
+
+    case 'auditLogs':
+      return (
+        <div className="p-4 text-center text-slate-400 text-xs font-mono">
+          ไม่สามารถแก้ไขประวัติ Audit Log ได้โดยตรง (Read-Only)
         </div>
       );
   }

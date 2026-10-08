@@ -118,3 +118,16 @@ model RequisitionItem {
   deductionRule    String          @default("FEFO")
   createdAt        DateTime        @default(now())
 }
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tableName  String   // Material, MaterialLot, StockTransaction, Product, etc.
+  recordId   String   // ID of the affected record
+  action     String   // UPDATE, DELETE, CREATE
+  summary    String?  // Brief human-readable change description
+  oldData    String?  // JSON string of previous values
+  newData    String?  // JSON string of new values
+  changedBy  String?  @default("Admin (DB Studio)")
+  createdAt  DateTime @default(now())
+}
+

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
         recipeCount,
         orderCount,
         sectionCount,
+        auditCount,
       ] = await Promise.all([
         prisma.material.count(),
         prisma.materialLot.count(),
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
         prisma.recipeItem.count(),
         prisma.productionOrder.count(),
         prisma.section.count(),
+        prisma.auditLog.count(),
       ]);
 
       return NextResponse.json({
@@ -36,6 +38,7 @@ export async function GET(req: NextRequest) {
         recipes: recipeCount,
         orders: orderCount,
         sections: sectionCount,
+        auditLogs: auditCount,
       });
     }
 
@@ -176,6 +179,24 @@ export async function GET(req: NextRequest) {
         });
         break;
 
+      case 'auditLogs':
+        records = await prisma.auditLog.findMany({
+          where: search
+            ? {
+                OR: [
+                  { tableName: { contains: search } },
+                  { recordId: { contains: search } },
+                  { action: { contains: search } },
+                  { summary: { contains: search } },
+                  { changedBy: { contains: search } },
+                ],
+              }
+            : undefined,
+          orderBy: { createdAt: 'desc' },
+          take: 150,
+        });
+        break;
+
       default:
         return NextResponse.json({ error: 'ตารางไม่ถูกต้อง' }, { status: 400 });
     }
@@ -185,6 +206,50 @@ export async function GET(req: NextRequest) {
     console.error('DB Studio GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+// Helper to fetch current record before modifying
+async function fetchOldRecord(table: string, id: string) {
+  try {
+    switch (table) {
+      case 'materials':
+        return await prisma.material.findUnique({ where: { id } });
+      case 'lots':
+        return await prisma.materialLot.findUnique({ where: { id } });
+      case 'transactions':
+        return await prisma.stockTransaction.findUnique({ where: { id } });
+      case 'products':
+        return await prisma.product.findUnique({ where: { id } });
+      case 'recipes':
+        return await prisma.recipeItem.findUnique({ where: { id } });
+      case 'orders':
+        return await prisma.productionOrder.findUnique({ where: { id } });
+      case 'sections':
+        return await prisma.section.findUnique({ where: { id } });
+      case 'auditLogs':
+        return await prisma.auditLog.findUnique({ where: { id } });
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+// Generate human-readable summary of fields changed
+function generateUpdateSummary(table: string, oldRec: any, newRec: any): string {
+  if (!oldRec || !newRec) return `แก้ไขข้อมูลในตาราง ${table}`;
+  const changes: string[] = [];
+  for (const key of Object.keys(newRec)) {
+    if (['updatedAt', 'createdAt'].includes(key)) continue;
+    const oldVal = oldRec[key];
+    const newVal = newRec[key];
+    if (oldVal !== undefined && String(oldVal) !== String(newVal)) {
+      changes.push(`${key}: "${oldVal ?? '-'}" ➔ "${newVal ?? '-'}"`);
+    }
+  }
+  if (changes.length === 0) return `แก้ไขข้อมูล ${table} (บันทึกข้อมูลเดิม)`;
+  return `แก้ไข ${table} [${changes.slice(0, 3).join(', ')}${changes.length > 3 ? '...' : ''}]`;
 }
 
 // PUT: Update record in database
@@ -197,6 +262,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'ข้อมูลไม่ครบถ้วน (table, id, data)' }, { status: 400 });
     }
 
+    const oldRecord = await fetchOldRecord(table, id);
     let updated: any = null;
 
     switch (table) {
@@ -294,6 +360,23 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: 'ไม่พบตารางที่ระบุ' }, { status: 400 });
     }
 
+    // Record Audit Log entry for the update
+    try {
+      await prisma.auditLog.create({
+        data: {
+          tableName: table,
+          recordId: id,
+          action: 'UPDATE',
+          summary: generateUpdateSummary(table, oldRecord, updated),
+          oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+          newData: updated ? JSON.stringify(updated) : null,
+          changedBy: 'ผู้ดูแลระบบ (DB Studio)',
+        },
+      });
+    } catch (auditErr) {
+      console.warn('Failed to save audit log:', auditErr);
+    }
+
     return NextResponse.json({ success: true, updated });
   } catch (error: any) {
     console.error('DB Studio PUT error:', error);
@@ -311,6 +394,8 @@ export async function DELETE(req: NextRequest) {
     if (!table || !id) {
       return NextResponse.json({ error: 'กรุณาระบุ table และ id' }, { status: 400 });
     }
+
+    const oldRecord = await fetchOldRecord(table, id);
 
     switch (table) {
       case 'materials':
@@ -361,8 +446,32 @@ export async function DELETE(req: NextRequest) {
       case 'sections':
         await prisma.section.delete({ where: { id } });
         break;
+      case 'auditLogs':
+        await prisma.auditLog.delete({ where: { id } });
+        break;
       default:
         return NextResponse.json({ error: 'ไม่พบตารางที่ระบุ' }, { status: 400 });
+    }
+
+    // Automatically record an Audit Log entry for deletions (except when deleting an audit log itself)
+    if (table !== 'auditLogs') {
+      try {
+        const anyOld = oldRecord as any;
+        const itemIdentifier = anyOld?.code || anyOld?.name || anyOld?.lotNumber || anyOld?.orderNo || id;
+        await prisma.auditLog.create({
+          data: {
+            tableName: table,
+            recordId: id,
+            action: 'DELETE',
+            summary: `ลบข้อมูลในตาราง ${table} [${itemIdentifier}]`,
+            oldData: oldRecord ? JSON.stringify(oldRecord) : null,
+            newData: null,
+            changedBy: 'ผู้ดูแลระบบ (DB Studio)',
+          },
+        });
+      } catch (auditErr) {
+        console.warn('Failed to write delete audit log:', auditErr);
+      }
     }
 
     return NextResponse.json({ success: true, message: 'ลบรายการสำเร็จ' });
