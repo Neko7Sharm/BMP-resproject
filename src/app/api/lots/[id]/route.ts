@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function PUT(
   request: Request,
@@ -33,16 +34,14 @@ export async function PUT(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'MaterialLot',
-        recordId: params.id,
-        action: 'UPDATE',
-        summary: `แก้ไขล็อต: ${updatedLot.lotNumber} (${updatedLot.material?.name || ''}) คงเหลือ ${updatedLot.quantityRemaining}`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        newData: JSON.stringify(updatedLot),
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'MaterialLot',
+      recordId: params.id,
+      action: 'UPDATE',
+      summary: `แก้ไขล็อต: ${updatedLot.lotNumber} (${updatedLot.material?.name || ''}) คงเหลือ ${updatedLot.quantityRemaining}`,
+      oldData: oldRecord,
+      newData: updatedLot,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json(updatedLot);
@@ -81,15 +80,14 @@ export async function DELETE(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'MaterialLot',
-        recordId: lotId,
-        action: 'DELETE',
-        summary: `ลบล็อต: ${oldRecord?.lotNumber || lotId} (${oldRecord?.material?.name || ''}) คงเหลือ ${oldRecord?.quantityRemaining ?? 0}`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'MaterialLot',
+      recordId: lotId,
+      action: 'DELETE',
+      summary: `ลบล็อต: ${oldRecord?.lotNumber || lotId} (${oldRecord?.material?.name || ''}) คงเหลือ ${oldRecord?.quantityRemaining ?? 0}`,
+      oldData: oldRecord,
+      newData: null,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'ลบล็อตนี้เรียบร้อยแล้ว' });

@@ -7,6 +7,7 @@ import {
   maskKey,
   validateGeminiKey,
 } from '@/lib/geminiKeys';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,16 @@ export async function POST(request: Request) {
       create: { key: SHARED_KEY_SETTING, value: key },
     });
 
+    // Write Audit Log (non-blocking)
+    recordAuditLog({
+      tableName: 'AppSetting',
+      recordId: SHARED_KEY_SETTING,
+      action: 'UPDATE',
+      summary: `อัปเดต Gemini API Key กลาง (${maskKey(key)})`,
+      newData: { key: SHARED_KEY_SETTING, maskedKey: maskKey(key) },
+      changedBy: 'ผู้ใช้งานระบบ',
+    }).catch(() => {});
+
     return NextResponse.json({
       success: true,
       message: 'บันทึก API Key กลางเรียบร้อยแล้ว ทุกคนที่ใช้ระบบจะใช้ key นี้สแกนได้ทันที',
@@ -56,6 +67,18 @@ export async function POST(request: Request) {
 export async function DELETE() {
   try {
     await prisma.appSetting.deleteMany({ where: { key: SHARED_KEY_SETTING } });
+
+    // Write Audit Log (non-blocking)
+    recordAuditLog({
+      tableName: 'AppSetting',
+      recordId: SHARED_KEY_SETTING,
+      action: 'DELETE',
+      summary: `ลบ Gemini API Key กลางออกจากระบบ`,
+      oldData: { key: SHARED_KEY_SETTING },
+      newData: null,
+      changedBy: 'ผู้ใช้งานระบบ',
+    }).catch(() => {});
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

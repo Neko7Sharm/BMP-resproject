@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function GET(
   request: Request,
@@ -75,16 +76,14 @@ export async function PUT(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'Product',
-        recordId: params.id,
-        action: 'UPDATE',
-        summary: `แก้ไขสูตรสินค้า: ${updated.code} - ${updated.name} (สูตรผลิต ${(recipeItems || []).length} รายการ)`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        newData: JSON.stringify(updated),
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'Product',
+      recordId: params.id,
+      action: 'UPDATE',
+      summary: `แก้ไขสูตรสินค้า: ${updated.code} - ${updated.name} (สูตรผลิต ${(recipeItems || []).length} รายการ)`,
+      oldData: oldRecord,
+      newData: updated,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json(updated);
@@ -133,15 +132,14 @@ export async function DELETE(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'Product',
-        recordId: params.id,
-        action: 'DELETE',
-        summary: `ลบสูตรสินค้า: ${oldRecord?.code || params.id} - ${oldRecord?.name || ''} (ลบสูตรและประวัติคำสั่งผลิตที่เกี่ยวข้อง)`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'Product',
+      recordId: params.id,
+      action: 'DELETE',
+      summary: `ลบสูตรสินค้า: ${oldRecord?.code || params.id} - ${oldRecord?.name || ''} (ลบสูตรและประวัติคำสั่งผลิตที่เกี่ยวข้อง)`,
+      oldData: oldRecord,
+      newData: null,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json({ success: true });

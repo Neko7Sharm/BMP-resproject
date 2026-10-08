@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { executeProductionRequisition } from '@/lib/stockService';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function GET() {
   try {
@@ -62,30 +63,26 @@ export async function POST(request: Request) {
       );
 
       // Write Audit Log (non-blocking)
-      prisma.auditLog.create({
-        data: {
-          tableName: 'ProductionOrder',
-          recordId: order.id,
-          action: 'CREATE',
-          summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ตัดสต็อกแล้ว)`,
-          newData: JSON.stringify(updatedOrder),
-          changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
-        },
+      recordAuditLog({
+        tableName: 'ProductionOrder',
+        recordId: order.id,
+        action: 'CREATE',
+        summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ตัดสต็อกแล้ว)`,
+        newData: updatedOrder,
+        changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
       }).catch(() => {});
 
       return NextResponse.json(updatedOrder, { status: 201 });
     }
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'ProductionOrder',
-        recordId: order.id,
-        action: 'CREATE',
-        summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ยังไม่ตัดสต็อก)`,
-        newData: JSON.stringify(order),
-        changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
-      },
+    recordAuditLog({
+      tableName: 'ProductionOrder',
+      recordId: order.id,
+      action: 'CREATE',
+      summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ยังไม่ตัดสต็อก)`,
+      newData: order,
+      changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
     }).catch(() => {});
 
     return NextResponse.json(order, { status: 201 });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
 import prisma from '@/lib/prisma';
 import { getAllKeys, GeminiKeyEntry } from '@/lib/geminiKeys';
+import { recordAuditLog } from '@/lib/auditLog';
 
 // วิเคราะห์ภาพใช้เวลานาน — กัน Vercel ตัดตอนกลางคัน
 export const maxDuration = 60;
@@ -581,6 +582,25 @@ export async function POST(request: Request) {
           createdLots,
         };
       });
+
+      // Write consolidated Audit Log for this entire stock card batch
+      recordAuditLog({
+        tableName: 'StockCardImport',
+        recordId: result.materialId,
+        action: 'IMPORT',
+        summary: `นำเข้า Stock Card [${documentRef || 'STOCK-CARD-IMPORT'}]: วัตถุดิบ "${result.materialName}", นำเข้าความเคลื่อนไหว ${result.importedTransactions} รายการ, เพิ่มล็อตใหม่ ${result.createdLots} ล็อต`,
+        newData: {
+          materialId: result.materialId,
+          materialName: result.materialName,
+          documentRef: documentRef || null,
+          creator: creator || null,
+          formYear: formYear || null,
+          importedTransactions: result.importedTransactions,
+          createdLots: result.createdLots,
+          totalRows: rows.length,
+        },
+        changedBy: creator || 'ระบบนำเข้า OCR',
+      }).catch(() => {});
 
       return NextResponse.json({ success: true, ...result });
     }

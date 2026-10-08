@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function POST(request: Request) {
   try {
@@ -61,15 +62,13 @@ export async function POST(request: Request) {
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'MaterialLot',
-        recordId: result.lot.id,
-        action: 'CREATE',
-        summary: `รับวัตถุดิบเข้า: ล็อต ${result.lot.lotNumber} จำนวน ${qty} หน่วย (materialId: ${materialId})`,
-        newData: JSON.stringify({ lot: result.lot, transaction: result.transaction }),
-        changedBy: createdBy || 'เจ้าหน้าที่รับของ',
-      },
+    recordAuditLog({
+      tableName: 'MaterialLot',
+      recordId: result.lot.id,
+      action: 'CREATE',
+      summary: `รับวัตถุดิบเข้า: ล็อต ${result.lot.lotNumber} จำนวน ${qty} หน่วย (materialId: ${materialId})`,
+      newData: { lot: result.lot, transaction: result.transaction },
+      changedBy: createdBy || 'เจ้าหน้าที่รับของ',
     }).catch(() => {});
 
     return NextResponse.json(result, { status: 201 });

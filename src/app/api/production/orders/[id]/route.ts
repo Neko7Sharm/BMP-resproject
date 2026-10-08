@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { executeProductionRequisition } from '@/lib/stockService';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function GET(
   request: Request,
@@ -55,15 +56,13 @@ export async function POST(
       );
 
       // Write Audit Log (non-blocking)
-      prisma.auditLog.create({
-        data: {
-          tableName: 'ProductionOrder',
-          recordId: params.id,
-          action: 'UPDATE',
-          summary: `ตัดสต็อกเบิกผลิต: คำสั่งผลิต ${updated.orderNo} (${updated.product?.name || ''}) ตัดวัตถุดิบ ${allocations?.length || 0} ล็อต`,
-          newData: JSON.stringify(updated),
-          changedBy: issuerName || 'เจ้าหน้าที่เบิกจ่าย',
-        },
+      recordAuditLog({
+        tableName: 'ProductionOrder',
+        recordId: params.id,
+        action: 'UPDATE',
+        summary: `ตัดสต็อกเบิกผลิต: คำสั่งผลิต ${updated.orderNo} (${updated.product?.name || ''}) ตัดวัตถุดิบ ${allocations?.length || 0} ล็อต`,
+        newData: updated,
+        changedBy: issuerName || 'เจ้าหน้าที่เบิกจ่าย',
       }).catch(() => {});
 
       return NextResponse.json(updated);

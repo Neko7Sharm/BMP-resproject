@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 // GET: Fetch records or table stats
 export async function GET(req: NextRequest) {
@@ -360,22 +361,16 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: 'ไม่พบตารางที่ระบุ' }, { status: 400 });
     }
 
-    // Record Audit Log entry for the update
-    try {
-      await prisma.auditLog.create({
-        data: {
-          tableName: table,
-          recordId: id,
-          action: 'UPDATE',
-          summary: generateUpdateSummary(table, oldRecord, updated),
-          oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-          newData: updated ? JSON.stringify(updated) : null,
-          changedBy: 'ผู้ดูแลระบบ (DB Studio)',
-        },
-      });
-    } catch (auditErr) {
-      console.warn('Failed to save audit log:', auditErr);
-    }
+    // Record Audit Log entry for the update (coalescing if edited rapidly)
+    await recordAuditLog({
+      tableName: table,
+      recordId: id,
+      action: 'UPDATE',
+      summary: generateUpdateSummary(table, oldRecord, updated),
+      oldData: oldRecord,
+      newData: updated,
+      changedBy: 'ผู้ดูแลระบบ (DB Studio)',
+    });
 
     return NextResponse.json({ success: true, updated });
   } catch (error: any) {
@@ -455,23 +450,17 @@ export async function DELETE(req: NextRequest) {
 
     // Automatically record an Audit Log entry for deletions (except when deleting an audit log itself)
     if (table !== 'auditLogs') {
-      try {
-        const anyOld = oldRecord as any;
-        const itemIdentifier = anyOld?.code || anyOld?.name || anyOld?.lotNumber || anyOld?.orderNo || id;
-        await prisma.auditLog.create({
-          data: {
-            tableName: table,
-            recordId: id,
-            action: 'DELETE',
-            summary: `ลบข้อมูลในตาราง ${table} [${itemIdentifier}]`,
-            oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-            newData: null,
-            changedBy: 'ผู้ดูแลระบบ (DB Studio)',
-          },
-        });
-      } catch (auditErr) {
-        console.warn('Failed to write delete audit log:', auditErr);
-      }
+      const anyOld = oldRecord as any;
+      const itemIdentifier = anyOld?.code || anyOld?.name || anyOld?.lotNumber || anyOld?.orderNo || id;
+      await recordAuditLog({
+        tableName: table,
+        recordId: id,
+        action: 'DELETE',
+        summary: `ลบข้อมูลในตาราง ${table} [${itemIdentifier}]`,
+        oldData: oldRecord,
+        newData: null,
+        changedBy: 'ผู้ดูแลระบบ (DB Studio)',
+      });
     }
 
     return NextResponse.json({ success: true, message: 'ลบรายการสำเร็จ' });

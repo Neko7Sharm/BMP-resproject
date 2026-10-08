@@ -460,6 +460,8 @@ export default function DBStudioPage() {
                 <div className={`p-1.5 rounded-lg border ${
                   viewingAuditLog.action === 'DELETE'
                     ? 'bg-rose-950 text-rose-400 border-rose-800'
+                    : (viewingAuditLog.action === 'CREATE' || viewingAuditLog.action === 'IMPORT')
+                    ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
                     : 'bg-amber-950 text-amber-400 border-amber-800'
                 }`}>
                   <History className="w-4 h-4" />
@@ -904,6 +906,7 @@ function renderTableCells(table: TableKey, record: any, onInspectAudit?: (log: a
     }
     case 'auditLogs': {
       const isDelete = record.action === 'DELETE';
+      const isCreate = record.action === 'CREATE' || record.action === 'IMPORT';
       return (
         <>
           <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap font-mono text-xs">
@@ -914,6 +917,8 @@ function renderTableCells(table: TableKey, record: any, onInspectAudit?: (log: a
               className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                 isDelete
                   ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                  : isCreate
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
                   : 'bg-amber-950/80 text-amber-400 border-amber-800'
               }`}
             >

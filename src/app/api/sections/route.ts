@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function GET() {
   try {
@@ -48,6 +49,17 @@ export async function POST(request: Request) {
         description,
       },
     });
+
+    // Write Audit Log (non-blocking)
+    recordAuditLog({
+      tableName: 'Section',
+      recordId: section.id,
+      action: 'CREATE',
+      summary: `เพิ่มโซนคลังใหม่: ${section.code} - ${section.name}`,
+      newData: section,
+      changedBy: 'ผู้ใช้งานระบบ',
+    }).catch(() => {});
+
     return NextResponse.json(section, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

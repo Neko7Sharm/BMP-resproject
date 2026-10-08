@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recordAuditLog } from '@/lib/auditLog';
 
 export async function GET(
   request: Request,
@@ -59,16 +60,14 @@ export async function PUT(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'Material',
-        recordId: params.id,
-        action: 'UPDATE',
-        summary: `แก้ไขวัตถุดิบ: ${updated.code} - ${updated.name}`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        newData: JSON.stringify(updated),
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'Material',
+      recordId: params.id,
+      action: 'UPDATE',
+      summary: `แก้ไขวัตถุดิบ: ${updated.code} - ${updated.name}`,
+      oldData: oldRecord,
+      newData: updated,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json(updated);
@@ -126,15 +125,14 @@ export async function DELETE(
     });
 
     // Write Audit Log (non-blocking)
-    prisma.auditLog.create({
-      data: {
-        tableName: 'Material',
-        recordId: materialId,
-        action: 'DELETE',
-        summary: `ลบวัตถุดิบ: ${oldRecord?.code || materialId} - ${oldRecord?.name || ''} (พร้อมข้อมูลล็อตและประวัติที่เกี่ยวข้อง)`,
-        oldData: oldRecord ? JSON.stringify(oldRecord) : null,
-        changedBy: 'ผู้ใช้งานระบบ',
-      },
+    recordAuditLog({
+      tableName: 'Material',
+      recordId: materialId,
+      action: 'DELETE',
+      summary: `ลบวัตถุดิบ: ${oldRecord?.code || materialId} - ${oldRecord?.name || ''} (พร้อมข้อมูลล็อตและประวัติที่เกี่ยวข้อง)`,
+      oldData: oldRecord,
+      newData: null,
+      changedBy: 'ผู้ใช้งานระบบ',
     }).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'ลบวัตถุดิบและข้อมูลที่เกี่ยวข้องเรียบร้อยแล้ว' });
