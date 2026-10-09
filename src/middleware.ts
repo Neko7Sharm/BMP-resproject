@@ -47,8 +47,30 @@ function isRouteAllowedForRole(role: string, pathname: string): boolean {
   return false;
 }
 
+const PUBLIC_VIEW_PAGES = ['/', '/inventory', '/transactions'];
+
+function isPublicViewPage(pathname: string): boolean {
+  if (PUBLIC_VIEW_PAGES.includes(pathname)) return true;
+  if (pathname.startsWith('/production/') && pathname.endsWith('/print')) return true;
+  return false;
+}
+
+// Read-only API routes that guests can fetch
+function isPublicReadApi(pathname: string, method: string): boolean {
+  if (method !== 'GET') return false;
+  return (
+    pathname === '/api/dashboard/stats' ||
+    pathname.startsWith('/api/materials') ||
+    pathname.startsWith('/api/sections') ||
+    pathname.startsWith('/api/transactions') ||
+    pathname.startsWith('/api/lots') ||
+    pathname.startsWith('/api/products')
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const method = req.method;
 
   // 1. Allow public files and auth API routes
   if (
@@ -56,6 +78,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/favicon.ico') ||
     pathname.startsWith('/api/auth/login') ||
     pathname.startsWith('/api/auth/logout') ||
+    pathname.startsWith('/api/auth/me') ||
     pathname.includes('.')
   ) {
     return NextResponse.next();
@@ -87,19 +110,31 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 3. If NOT logged in:
+  // 3. If NOT logged in (Guest / Viewer):
   if (!decodedUser) {
-    // API route -> 401
+    // A) If public read-only API GET request -> Allow
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'กรุณาเข้าสู่ระบบก่อนใช้งาน' }, { status: 401 });
+      if (isPublicReadApi(pathname, method)) {
+        return NextResponse.next();
+      }
+      return NextResponse.json(
+        { error: 'กรุณาเข้าสู่ระบบก่อนทำการเพิ่ม ลบ หรือแก้ไขข้อมูล' },
+        { status: 401 }
+      );
     }
-    // Web page -> redirect to /login
+
+    // B) If public view web page -> Allow guest to view!
+    if (isPublicViewPage(pathname)) {
+      return NextResponse.next();
+    }
+
+    // C) Protected page -> redirect to /login
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // 4. Role-Based Access Control for pages
+  // 4. Role-Based Access Control for logged-in users on pages
   if (!pathname.startsWith('/api/')) {
     const isAllowed = isRouteAllowedForRole(decodedUser.role, pathname);
     if (!isAllowed) {

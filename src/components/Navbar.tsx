@@ -22,6 +22,7 @@ import {
   User,
   LogOut,
   Users,
+  LogIn,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -210,8 +211,8 @@ export default function Navbar() {
               </Link>
             )}
 
-            {/* User Profile Pill & Dropdown */}
-            {user && (
+            {/* User Profile Pill & Dropdown (When logged in) / Login Button (When guest) */}
+            {user ? (
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen((v) => !v)}
@@ -262,6 +263,14 @@ export default function Navbar() {
                   </>
                 )}
               </div>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>เข้าสู่ระบบ</span>
+              </Link>
             )}
 
             {/* Mobile hamburger */}
@@ -287,8 +296,8 @@ export default function Navbar() {
             : 'bg-white border-slate-100 text-slate-700'
         }`}>
           <div className="max-w-7xl mx-auto px-4 py-3 space-y-1">
-            {/* Mobile User Info Banner */}
-            {user && (
+            {/* Mobile User Info / Guest Banner */}
+            {user ? (
               <div className="p-3 bg-purple-50/70 border border-purple-100 rounded-xl mb-2 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -310,6 +319,20 @@ export default function Navbar() {
                   <LogOut className="w-3.5 h-3.5" />
                   ออก
                 </button>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-2 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-slate-800">โหมดดูข้อมูลทั่วไป (Guest)</div>
+                  <div className="text-[10px] text-slate-500">เข้าสู่ระบบเพื่อแก้ไขหรือจัดการสต็อก</div>
+                </div>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
+                >
+                  เข้าสู่ระบบ
+                </Link>
               </div>
             )}
 

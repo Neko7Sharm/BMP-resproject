@@ -36,20 +36,20 @@ const AuthContext = createContext<AuthContextType>({
 
 // Route Access Matrix
 export function checkRouteAccess(role: UserRole | null | undefined, pathname: string): boolean {
-  if (!role) return false;
-  if (role === 'ADMIN') return true; // Admin has access to all routes
+  const effectiveRole = role || 'VIEWER';
+  if (effectiveRole === 'ADMIN') return true; // Admin has access to all routes
 
-  // Public / Shared for all logged-in roles
+  // Public / Shared for all users (including unauthenticated guests)
   if (
     pathname === '/' ||
     pathname === '/inventory' ||
     pathname === '/transactions' ||
-    pathname.startsWith('/production/') // includes print page
+    (pathname.startsWith('/production/') && pathname.endsWith('/print'))
   ) {
     return true;
   }
 
-  if (role === 'STORE') {
+  if (effectiveRole === 'STORE') {
     // Store/Warehouse: scan, inbound, sections
     return (
       pathname.startsWith('/scan') ||
@@ -58,7 +58,7 @@ export function checkRouteAccess(role: UserRole | null | undefined, pathname: st
     );
   }
 
-  if (role === 'PROD') {
+  if (effectiveRole === 'PROD') {
     // Production/Planning: production calculation/orders, recipes
     return (
       pathname.startsWith('/production') ||
@@ -66,9 +66,14 @@ export function checkRouteAccess(role: UserRole | null | undefined, pathname: st
     );
   }
 
-  if (role === 'VIEWER') {
+  if (effectiveRole === 'VIEWER') {
     // Viewer: read-only access to dashboard, inventory, transactions
-    return pathname === '/' || pathname === '/inventory' || pathname === '/transactions';
+    return (
+      pathname === '/' ||
+      pathname === '/inventory' ||
+      pathname === '/transactions' ||
+      (pathname.startsWith('/production/') && pathname.endsWith('/print'))
+    );
   }
 
   return false;
@@ -115,10 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = role === 'ADMIN';
   const isStore = role === 'STORE';
   const isProd = role === 'PROD';
-  const isViewer = role === 'VIEWER';
-  const canEdit = !isViewer && !!role; // VIEWER cannot edit/save
+  const isViewer = role === 'VIEWER' || !role; // Unauthenticated guest is also VIEWER
+  const canEdit = !isViewer && !!role; // Only authenticated non-VIEWER can edit
 
-  const roleConfig = role ? ROLE_CONFIG[role] : null;
+  const roleConfig = role ? ROLE_CONFIG[role] : ROLE_CONFIG['VIEWER'];
 
   const canAccessRoute = useCallback(
     (pathname: string) => checkRouteAccess(role, pathname),
