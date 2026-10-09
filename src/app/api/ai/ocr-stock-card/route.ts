@@ -34,9 +34,9 @@ async function analyzeImageWithGemini(
 
   // โมเดล vision ที่เร็วที่สุดและแม่นยำสูง (จัดเรียงตัวที่เร็วที่สุดไว้หน้าสุดเพื่อหลีกเลี่ยง Gateway Timeout)
   const candidateModels = [
-    'gemini-3.5-flash',      // เร็วที่สุด (~2.5 วินาที)
-    'gemini-3.8-flash',      // แม่นยำสูง (~4 วินาที)
-    'gemini-flash-latest',   // ตัวสำรอง
+    'gemini-3.5-flash',       // เร็วที่สุด (~2.5-3.5 วินาที)
+    'gemini-3.5-flash-lite',  // เร็วพิเศษและกินโควตาน้อย (~3.5 วินาที)
+    'gemini-flash-latest',    // ตัวสำรอง
   ];
 
   const prompt = `คุณเป็นผู้เชี่ยวชาญอ่านเอกสารใบสต็อกการ์ดคลังสินค้า (Stock Card / FR 1-6) ลายมือภาษาไทยและตัวเลข
@@ -107,6 +107,7 @@ async function analyzeImageWithGemini(
           generationConfig: {
             temperature: 0.1,
             responseMimeType: 'application/json',
+            maxOutputTokens: 2500,
           },
           safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },

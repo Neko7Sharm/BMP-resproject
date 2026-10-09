@@ -30,12 +30,18 @@ export async function getSharedKey(): Promise<string | null> {
   }
 }
 
-/** ลำดับการใช้งาน: key ระบบ (env) ก่อน แล้วค่อย key กลางใน DB */
+/** ลำดับการใช้งาน: key กลางที่ผู้ใช้ตั้งใน DB ก่อน (ได้รับการทดสอบแล้ว) ตามด้วย key ระบบ (env) ที่ไม่ซ้ำกัน */
 export async function getAllKeys(): Promise<GeminiKeyEntry[]> {
-  const entries: GeminiKeyEntry[] = getSystemKeys().map((key) => ({ key, source: 'system' as const }));
+  const entries: GeminiKeyEntry[] = [];
   const shared = await getSharedKey();
-  if (shared && !entries.some((e) => e.key === shared)) {
-    entries.push({ key: shared, source: 'shared' });
+  if (shared && shared.trim()) {
+    entries.push({ key: shared.trim(), source: 'shared' });
+  }
+  const systemKeys = getSystemKeys();
+  for (const sysKey of systemKeys) {
+    if (sysKey && !entries.some((e) => e.key === sysKey)) {
+      entries.push({ key: sysKey, source: 'system' });
+    }
   }
   return entries;
 }

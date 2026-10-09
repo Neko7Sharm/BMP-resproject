@@ -127,10 +127,10 @@ export default function ScanPage() {
     }
   };
 
-  // Read file → optimize on client (downscale to max 2048px + JPEG 85%) → store in ScanContext
-  const processFile = useCallback(async (file: File) => {
+  // Read file → optimize on client (downscale to max 1280px + JPEG 80%) → store in ScanContext & auto scan
+  const processFile = useCallback(async (file: File, autoStart: boolean = true) => {
     if (!file.type.startsWith('image/')) { setErrorMsg('รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG, WEBP)'); return; }
-    if (file.size > 20 * 1024 * 1024) { setErrorMsg('ไฟล์ใหญ่เกิน 20MB กรุณาลดขนาดก่อนอัปโหลด'); return; }
+    if (file.size > 25 * 1024 * 1024) { setErrorMsg('ไฟล์ใหญ่เกิน 25MB กรุณาลดขนาดก่อนอัปโหลด'); return; }
     setErrorMsg(null); setCommitDone(false); setCommitStats(null);
     setSelectedMaterialId(''); setSelectedSectionId('');
     setIsOptimizing(true);
@@ -141,6 +141,9 @@ export default function ScanPage() {
         originalKB: opt.originalSizeKB,
         optimizedKB: opt.optimizedSizeKB,
       });
+      if (autoStart) {
+        startScan(opt.base64, opt.mimeType);
+      }
     } catch (err: any) {
       console.error('Image optimization error:', err);
       // Fallback: load raw
@@ -149,22 +152,26 @@ export default function ScanPage() {
       reader.onload = (e) => {
         const b64 = (e.target?.result as string).replace(/^data:image\/\w+;base64,/, '');
         setImageData(url, b64, file.type);
+        if (autoStart) {
+          startScan(b64, file.type);
+        }
       };
       reader.readAsDataURL(file);
     } finally {
       setIsOptimizing(false);
     }
-  }, [setErrorMsg, setImageData]);
+  }, [setErrorMsg, setImageData, startScan]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processFile(file);
+    if (file) processFile(file, true);
+    e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) processFile(file);
+    if (file) processFile(file, true);
   };
 
   // Stop webcam stream cleanly
@@ -218,24 +225,52 @@ export default function ScanPage() {
     }
   }, []);
 
-  // Snap photo from live video canvas
+  // Snap photo from live video canvas (1-step instant encode directly to 1280px & start scan)
   const captureWebcam = useCallback(() => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], `camera_scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        stopWebcam();
-        processFile(file);
+
+    let width = video.videoWidth || 1280;
+    let height = video.videoHeight || 720;
+    const maxDim = 1280;
+    if (width > maxDim || height > maxDim) {
+      if (width > height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
       }
-    }, 'image/jpeg', 0.95);
-  }, [processFile, stopWebcam]);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(video, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
+    const b64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const sizeKB = Math.round((b64.length * 3) / 4 / 1024);
+
+    stopWebcam();
+    setErrorMsg(null);
+    setCommitDone(false);
+    setCommitStats(null);
+    setSelectedMaterialId('');
+    setSelectedSectionId('');
+    setImageData(dataUrl, b64, 'image/jpeg', {
+      originalKB: sizeKB,
+      optimizedKB: sizeKB,
+    });
+
+    // เริ่มสแกนทันทีโดยไม่ต้องรอกดอีกรอบ
+    startScan(b64, 'image/jpeg');
+  }, [stopWebcam, setErrorMsg, setImageData, startScan]);
 
   // Switch between rear & front camera
   const toggleFacingMode = useCallback(() => {
