@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { recordAuditLog } from '@/lib/auditLog';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
@@ -86,6 +87,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user || user.role === 'VIEWER') {
+      return NextResponse.json(
+        { error: 'ไม่มีสิทธิ์เพิ่มวัตถุดิบ (สำหรับเจ้าหน้าที่คลังหรือผู้ดูแลระบบเท่านั้น)' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { code, name, sectionId, baseUnit, minSafetyStock } = body;
 
@@ -110,7 +119,7 @@ export async function POST(request: Request) {
       action: 'CREATE',
       summary: `เพิ่มวัตถุดิบใหม่: ${material.code} - ${material.name}`,
       newData: material,
-      changedBy: 'ผู้ใช้งานระบบ',
+      changedBy: user.name || user.username,
     });
 
     return NextResponse.json(material, { status: 201 });

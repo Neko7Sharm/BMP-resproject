@@ -15,6 +15,7 @@ import {
   CalendarPlus,
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
+import { useAuth } from '@/context/AuthContext';
 
 interface Transaction {
   id: string;
@@ -87,6 +88,7 @@ function groupByDate(transactions: Transaction[]) {
 }
 
 export default function TransactionsPage() {
+  const { user, isAdmin, isProd } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [typeFilter, setTypeFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -134,21 +136,33 @@ export default function TransactionsPage() {
           <p className="text-xs text-slate-500 mt-0.5">บันทึกความเคลื่อนไหวทุกรายการ ตรวจสอบย้อนหลังได้</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/production?tab=history&createBackdate=true"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
-          >
-            <CalendarPlus className="w-3.5 h-3.5" />
-            <span>➕ ทำใบเบิกผลิตย้อนหลัง</span>
-          </Link>
-          <Link
-            href="/production?tab=history"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
-          >
-            <span>ประวัติใบเบิกผลิต</span>
-          </Link>
-        </div>
+        {(isAdmin || isProd) ? (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/production?tab=history&createBackdate=true"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              <span>➕ ทำใบเบิกผลิตย้อนหลัง</span>
+            </Link>
+            <Link
+              href="/production?tab=history"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+            >
+              <span>ประวัติใบเบิกผลิต</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600">
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <span>โหมดดูประวัติ (อ่านอย่างเดียว)</span>
+            {!user && (
+              <Link href="/login?next=/transactions" className="text-purple-600 hover:text-purple-700 font-bold underline ml-1">
+                เข้าสู่ระบบ
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filter + Search */}

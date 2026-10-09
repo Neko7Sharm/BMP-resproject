@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { recordAuditLog } from '@/lib/auditLog';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getCurrentUser();
+    if (!user || user.role === 'VIEWER') {
+      return NextResponse.json(
+        { error: 'ไม่มีสิทธิ์แก้ไขล็อต (สำหรับเจ้าหน้าที่คลังหรือผู้ดูแลระบบเท่านั้น)' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { lotNumber, quantityRemaining, initialQuantity, expDate, mfgDate, costPerUnit } = body;
 
@@ -41,7 +50,7 @@ export async function PUT(
       summary: `แก้ไขล็อต: ${updatedLot.lotNumber} (${updatedLot.material?.name || ''}) คงเหลือ ${updatedLot.quantityRemaining}`,
       oldData: oldRecord,
       newData: updatedLot,
-      changedBy: 'ผู้ใช้งานระบบ',
+      changedBy: user.name || user.username,
     });
 
     return NextResponse.json(updatedLot);
@@ -55,6 +64,14 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getCurrentUser();
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'STORE')) {
+      return NextResponse.json(
+        { error: 'ไม่มีสิทธิ์ลบล็อต (สำหรับเจ้าหน้าที่คลังหรือผู้ดูแลระบบเท่านั้น)' },
+        { status: 403 }
+      );
+    }
+
     const lotId = params.id;
 
     const oldRecord = await prisma.materialLot.findUnique({
@@ -87,7 +104,7 @@ export async function DELETE(
       summary: `ลบล็อต: ${oldRecord?.lotNumber || lotId} (${oldRecord?.material?.name || ''}) คงเหลือ ${oldRecord?.quantityRemaining ?? 0}`,
       oldData: oldRecord,
       newData: null,
-      changedBy: 'ผู้ใช้งานระบบ',
+      changedBy: user.name || user.username,
     });
 
     return NextResponse.json({ success: true, message: 'ลบล็อตนี้เรียบร้อยแล้ว' });

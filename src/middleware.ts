@@ -143,7 +143,17 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 5. Special protection for ADMIN only pages & APIs
+  // 5. Block write API requests for VIEWER role (Read-only user)
+  if (decodedUser.role === 'VIEWER' && pathname.startsWith('/api/')) {
+    if (method !== 'GET' && !pathname.startsWith('/api/auth/')) {
+      return NextResponse.json(
+        { error: 'ผู้ใช้งานประเภทดูข้อมูล (Viewer) สามารถดูข้อมูลได้อย่างเดียว ไม่สามารถเพิ่ม ลบ หรือแก้ไขข้อมูลได้' },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 6. Special protection for ADMIN only pages & APIs
   if (
     pathname.startsWith('/db-studio') ||
     pathname.startsWith('/settings') ||

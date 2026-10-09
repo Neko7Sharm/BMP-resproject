@@ -22,6 +22,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -205,6 +206,7 @@ function DeleteConfirmModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
+  const { canEdit, user } = useAuth();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState('all');
@@ -283,6 +285,7 @@ export default function InventoryPage() {
   // ── Add Material ──
   async function handleAddMaterial(e: React.FormEvent) {
     e.preventDefault();
+    if (!canEdit) { alert('คุณไม่มีสิทธิ์เพิ่มวัตถุดิบ (โหมดอ่านอย่างเดียว)'); return; }
     if (!newCode || !newName) return;
     setIsSubmitting(true);
     try {
@@ -309,6 +312,7 @@ export default function InventoryPage() {
 
   // ── Edit Material ──
   function openEditMaterial(m: Material) {
+    if (!canEdit) return;
     setEditingMaterial(m);
     setEditCode(m.code); setEditName(m.name); setEditUnit(m.baseUnit);
     setEditSectionId(m.section?.id || ''); setEditMinStock(String(m.minSafetyStock));
@@ -316,6 +320,7 @@ export default function InventoryPage() {
 
   async function handleUpdateMaterial(e: React.FormEvent) {
     e.preventDefault();
+    if (!canEdit) { alert('คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ (โหมดอ่านอย่างเดียว)'); return; }
     if (!editingMaterial) return;
     setIsUpdating(true);
     try {
@@ -332,6 +337,7 @@ export default function InventoryPage() {
 
   // ── Delete Material ──
   async function handleDeleteMaterial() {
+    if (!canEdit) { alert('คุณไม่มีสิทธิ์ลบวัตถุดิบ (โหมดอ่านอย่างเดียว)'); return; }
     if (!deletingMaterial) return;
     setIsDeleting(true);
     try {
@@ -345,6 +351,7 @@ export default function InventoryPage() {
   // ── Edit Lot ──
   function openEditLot(m: Material, lot: MaterialLot, e: React.MouseEvent) {
     e.stopPropagation();
+    if (!canEdit) return;
     setEditingLot({ materialId: m.id, materialName: m.name, baseUnit: m.baseUnit, lot });
     setEditLotNumber(lot.lotNumber);
     setEditLotQuantity(String(lot.quantityRemaining));
@@ -353,6 +360,7 @@ export default function InventoryPage() {
 
   async function handleUpdateLot(e: React.FormEvent) {
     e.preventDefault();
+    if (!canEdit) { alert('คุณไม่มีสิทธิ์แก้ไขล็อต (โหมดอ่านอย่างเดียว)'); return; }
     if (!editingLot) return;
     setIsUpdatingLot(true);
     try {
@@ -370,6 +378,7 @@ export default function InventoryPage() {
   // ── Delete Lot ──
   async function handleDeleteLot(lot: MaterialLot, e: React.MouseEvent) {
     e.stopPropagation();
+    if (!canEdit) { alert('คุณไม่มีสิทธิ์ลบล็อต (โหมดอ่านอย่างเดียว)'); return; }
     if (!confirm(`ลบล็อต "${lot.lotNumber}" ออกจากระบบ?`)) return;
     try {
       const res = await fetch(`/api/lots/${lot.id}`, { method: 'DELETE' });
@@ -397,18 +406,32 @@ export default function InventoryPage() {
           <p className="text-xs text-slate-500 mt-0.5">แยกตามล็อต วันหมดอายุ และโซนจัดเก็บ</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/scan" className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-            <ScanLine className="w-3.5 h-3.5" /> AI สแกน
-          </Link>
-          <Link href="/inbound" className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-            <ArrowDownToLine className="w-3.5 h-3.5" /> รับเข้า
-          </Link>
-          <button
-            onClick={() => { setNewCode(`RM-${Date.now().toString().slice(-4)}`); setNewName(''); if (sections.length > 0) setNewSectionId(sections[0].id); setShowAddModal(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
-          >
-            <Plus className="w-3.5 h-3.5" /> เพิ่มของในคลัง
-          </button>
+          {canEdit ? (
+            <>
+              <Link href="/scan" className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+                <ScanLine className="w-3.5 h-3.5" /> AI สแกน
+              </Link>
+              <Link href="/inbound" className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+                <ArrowDownToLine className="w-3.5 h-3.5" /> รับเข้า
+              </Link>
+              <button
+                onClick={() => { setNewCode(`RM-${Date.now().toString().slice(-4)}`); setNewName(''); if (sections.length > 0) setNewSectionId(sections[0].id); setShowAddModal(true); }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> เพิ่มของในคลัง
+              </button>
+            </>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600">
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              <span>โหมดดูข้อมูล (อ่านอย่างเดียว)</span>
+              {!user && (
+                <Link href="/login?next=/inventory" className="text-purple-600 hover:text-purple-700 font-bold underline ml-1">
+                  เข้าสู่ระบบเพื่อแก้ไข
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -570,11 +593,13 @@ export default function InventoryPage() {
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">ปกติ</span>
                     )}
-                    <ActionMenu
-                      onEdit={() => openEditMaterial(m)}
-                      onInbound={() => navigateToInbound(m.id)}
-                      onDelete={() => setDeletingMaterial(m)}
-                    />
+                    {canEdit && (
+                      <ActionMenu
+                        onEdit={() => openEditMaterial(m)}
+                        onInbound={() => navigateToInbound(m.id)}
+                        onDelete={() => setDeletingMaterial(m)}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -590,12 +615,14 @@ export default function InventoryPage() {
                           มีของพร้อมจ่ายขึ้นก่อน → FEFO/FIFO • ล็อตหมดแล้วอยู่ด้านล่าง
                         </p>
                       </div>
-                      <Link
-                        href={`/inbound?materialId=${m.id}`}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> รับเข้าล็อตใหม่
-                      </Link>
+                      {canEdit && (
+                        <Link
+                          href={`/inbound?materialId=${m.id}`}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> รับเข้าล็อตใหม่
+                        </Link>
+                      )}
                     </div>
 
                     {(() => {
@@ -625,7 +652,7 @@ export default function InventoryPage() {
                                 <th className="py-2.5 px-3 text-right">คงเหลือ</th>
                                 <th className="py-2.5 px-3 text-right">สัดส่วน</th>
                                 <th className="py-2.5 px-3 text-center">สถานะ</th>
-                                <th className="py-2.5 px-2 text-center w-16">จัดการ</th>
+                                {canEdit && <th className="py-2.5 px-2 text-center w-16">จัดการ</th>}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -661,16 +688,18 @@ export default function InventoryPage() {
                                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">พร้อมจ่าย</span>
                                     )}
                                   </td>
-                                  <td className="py-2.5 px-2 text-center">
-                                    <div className="flex items-center justify-center gap-0.5">
-                                      <button onClick={(e) => openEditLot(m, lot, e)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" title="แก้ไขล็อต">
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button onClick={(e) => handleDeleteLot(lot, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="ลบล็อต">
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
+                                  {canEdit && (
+                                    <td className="py-2.5 px-2 text-center">
+                                      <div className="flex items-center justify-center gap-0.5">
+                                        <button onClick={(e) => openEditLot(m, lot, e)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" title="แก้ไขล็อต">
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={(e) => handleDeleteLot(lot, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition" title="ลบล็อต">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
                                 </tr>
                               );
                             })}
