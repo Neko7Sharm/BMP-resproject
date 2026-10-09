@@ -197,6 +197,31 @@ async function main() {
     },
   });
 
+  // 5. Seed Default User Accounts
+  const bcrypt = require('bcryptjs');
+  const userCount = await prisma.user.count();
+  if (userCount === 0) {
+    const defaultUsers = [
+      { username: 'admin', name: 'ผู้ดูแลระบบ', passwordRaw: 'admin1234', role: 'ADMIN' },
+      { username: 'store', name: 'เจ้าหน้าที่คลัง', passwordRaw: '1234', role: 'STORE' },
+      { username: 'prod', name: 'ฝ่ายผลิตและวางแผน', passwordRaw: '1234', role: 'PROD' },
+      { username: 'viewer', name: 'ผู้บริหาร/ดูข้อมูล', passwordRaw: '1234', role: 'VIEWER' },
+    ];
+    for (const u of defaultUsers) {
+      const passwordHash = await bcrypt.hash(u.passwordRaw, 10);
+      await prisma.user.create({
+        data: {
+          username: u.username,
+          name: u.name,
+          passwordHash,
+          role: u.role,
+          isActive: true,
+        },
+      });
+    }
+    console.log('Seeded 4 default user accounts (admin, store, prod, viewer)');
+  }
+
   console.log('Seeding finished successfully!');
 }
 

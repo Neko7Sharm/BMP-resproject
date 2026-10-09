@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { executeProductionRequisition } from '@/lib/stockService';
 import { recordAuditLog } from '@/lib/auditLog';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
   try {
@@ -26,8 +27,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const sessionUser = await getCurrentUser();
     const body = await request.json();
     const { productId, targetQuantity, orderNo, requestedBy, notes, autoDeduct, allocations, orderDate } = body;
+
+    const requester = requestedBy?.trim() || sessionUser?.name || 'ฝ่ายวางแผนการผลิต';
 
     if (!productId || !targetQuantity || Number(targetQuantity) <= 0) {
       return NextResponse.json(
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
         orderNo: generatedOrderNo,
         productId,
         targetQuantity: Number(targetQuantity),
-        requestedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
+        requestedBy: requester,
         notes: notes || null,
         status: 'DRAFT',
         createdAt: effectiveDate,
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
       const updatedOrder = await executeProductionRequisition(
         order.id,
         allocations,
-        requestedBy || 'เจ้าหน้าที่เบิกจ่าย',
+        requester,
         effectiveDate
       );
 
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
         action: 'CREATE',
         summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ตัดสต็อกแล้ว)`,
         newData: updatedOrder,
-        changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
+        changedBy: requester,
       });
 
       return NextResponse.json(updatedOrder, { status: 201 });
@@ -82,7 +86,7 @@ export async function POST(request: Request) {
       action: 'CREATE',
       summary: `สร้างคำสั่งผลิต ${order.orderNo} สินค้า: ${order.product?.name || productId} จำนวน ${targetQuantity} (ยังไม่ตัดสต็อก)`,
       newData: order,
-      changedBy: requestedBy || 'ฝ่ายวางแผนการผลิต',
+      changedBy: requester,
     });
 
     return NextResponse.json(order, { status: 201 });

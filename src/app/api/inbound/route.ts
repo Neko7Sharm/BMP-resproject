@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { recordAuditLog } from '@/lib/auditLog';
+import { getCurrentUser, ROLE_CONFIG } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    const sessionUser = await getCurrentUser();
     const body = await request.json();
     const {
       materialId,
@@ -17,6 +19,10 @@ export async function POST(request: Request) {
       remarks,
       createdBy,
     } = body;
+
+    const userLabel = sessionUser
+      ? `${sessionUser.name} (${ROLE_CONFIG[sessionUser.role]?.shortLabel || sessionUser.role})`
+      : createdBy || 'เจ้าหน้าที่รับของ';
 
     if (!materialId || !lotNumber || !quantity || Number(quantity) <= 0) {
       return NextResponse.json(
@@ -56,7 +62,7 @@ export async function POST(request: Request) {
           lotBalanceAfter: qty,
           documentRef: documentRef || null,
           remarks: remarks || null,
-          createdBy: createdBy || 'เจ้าหน้าที่รับของ',
+          createdBy: userLabel,
           transactionDate: receiveDate ? new Date(receiveDate) : new Date(),
         },
       });
@@ -72,7 +78,7 @@ export async function POST(request: Request) {
       action: 'CREATE',
       summary: `รับวัตถุดิบเข้า: ${matName} ล็อต ${result.lot.lotNumber} จำนวน ${qty} ${result.lot.material?.baseUnit || 'หน่วย'}`,
       newData: { lot: result.lot, transaction: result.transaction },
-      changedBy: createdBy || 'เจ้าหน้าที่รับของ',
+      changedBy: userLabel,
     });
 
     return NextResponse.json(result, { status: 201 });

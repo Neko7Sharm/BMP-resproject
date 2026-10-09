@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import { getCurrentUser, ROLE_CONFIG } from './auth';
 
 export interface AuditLogOptions {
   tableName: string;
@@ -42,9 +43,24 @@ export async function recordAuditLog(options: AuditLogOptions) {
       summary,
       oldData,
       newData,
-      changedBy = 'ผู้ใช้งานระบบ',
+      changedBy,
       coalesceWindowMs = 10000,
     } = options;
+
+    let finalChangedBy = changedBy;
+    if (!finalChangedBy || finalChangedBy === 'ผู้ใช้งานระบบ') {
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          const roleLabel = ROLE_CONFIG[currentUser.role]?.shortLabel || currentUser.role;
+          finalChangedBy = `${currentUser.name} (${roleLabel})`;
+        } else {
+          finalChangedBy = 'ผู้ใช้งานระบบ';
+        }
+      } catch {
+        finalChangedBy = 'ผู้ใช้งานระบบ';
+      }
+    }
 
     const oldDataStr = safeJSON(oldData);
     const newDataStr = safeJSON(newData);
@@ -57,7 +73,7 @@ export async function recordAuditLog(options: AuditLogOptions) {
           tableName,
           recordId: String(recordId),
           action,
-          changedBy,
+          changedBy: finalChangedBy,
           createdAt: { gte: windowStart },
         },
         orderBy: { createdAt: 'desc' },
@@ -91,7 +107,7 @@ export async function recordAuditLog(options: AuditLogOptions) {
         summary: summary ? summary.slice(0, 500) : null,
         oldData: oldDataStr,
         newData: newDataStr,
-        changedBy,
+        changedBy: finalChangedBy,
       },
     });
   } catch (error) {

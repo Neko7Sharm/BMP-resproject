@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import {
   Settings, KeyRound, CheckCircle2, AlertCircle, ExternalLink,
-  Eye, EyeOff, Save, RefreshCw, Loader2, Info, Database, ChevronRight
+  Eye, EyeOff, Save, RefreshCw, Loader2, Info, Database, ChevronRight,
+  Users, UserCheck
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -62,7 +63,47 @@ export default function SettingsPage() {
           <Settings className="w-6 h-6 text-slate-600" />
           ตั้งค่าระบบ
         </h1>
-        <p className="text-sm text-slate-500 mt-1">กำหนดค่าการเชื่อมต่อ AI และส่วนต่างๆ ของระบบ</p>
+        <p className="text-sm text-slate-500 mt-1">กำหนดค่าการเชื่อมต่อ AI, จัดการบัญชีผู้ใช้ และส่วนต่างๆ ของระบบ</p>
+      </div>
+
+      {/* User Accounts Management Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center">
+              <Users className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900 text-sm">จัดการผู้ใช้งานและสิทธิ์ (Accounts & RBAC)</h2>
+              <p className="text-xs text-slate-500">สร้างบัญชีพนักงาน กำหนดตำแหน่ง และรีเซ็ตรหัสผ่าน</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+            <UserCheck className="w-3.5 h-3.5" />สิทธิ์แอดมิน
+          </span>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            ระบบจำกัดสิทธิ์ตาม 4 ตำแหน่งหลัก: <strong>แอดมิน</strong>, <strong>คลัง</strong>, <strong>ผลิต</strong>, และ <strong>ดูข้อมูล</strong> 
+            เพื่อความปลอดภัยของข้อมูล และบันทึกประวัติการเปลี่ยนแปลง (Audit Logs) ตามบุคคลจริง
+          </p>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <Link
+              href="/settings/users"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-200 transition"
+            >
+              <Users className="w-4 h-4" />
+              <span>เปิดหน้าระบบจัดการผู้ใช้งาน</span>
+              <ChevronRight className="w-3.5 h-3.5 text-purple-200" />
+            </Link>
+
+            <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+              URL: /settings/users
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Gemini API Key Card */}

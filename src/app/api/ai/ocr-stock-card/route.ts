@@ -3,6 +3,7 @@ import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from '@google/ge
 import prisma from '@/lib/prisma';
 import { getAllKeys, GeminiKeyEntry } from '@/lib/geminiKeys';
 import { recordAuditLog } from '@/lib/auditLog';
+import { getCurrentUser } from '@/lib/auth';
 
 // วิเคราะห์ภาพใช้เวลานาน — กัน Vercel ตัดตอนกลางคัน
 export const maxDuration = 60;
@@ -393,7 +394,9 @@ export async function POST(request: Request) {
 
     // === ACTION: COMMIT TO DATABASE ===
     if (action === 'COMMIT') {
+      const sessionUser = await getCurrentUser();
       const { materialId, materialName, baseUnit, sectionId, documentRef, creator, formYear, rows } = dataToCommit;
+      const finalCreator = creator?.trim() || sessionUser?.name || 'ระบบนำเข้า OCR';
 
       if (!rows || !Array.isArray(rows) || rows.length === 0) {
         return NextResponse.json({ error: 'ไม่มีรายการที่จะบันทึก' }, { status: 400 });
@@ -552,7 +555,7 @@ export async function POST(request: Request) {
                 transactionDate: txDate,
                 documentRef: documentRef || 'STOCK-CARD-IMPORT',
                 remarks: row.remarks || `รับเข้าล็อต ${lotNum}`,
-                createdBy: creator || 'ระบบนำเข้า OCR',
+                createdBy: finalCreator,
               },
             });
             importedTx++;
@@ -568,7 +571,7 @@ export async function POST(request: Request) {
                 transactionDate: txDate,
                 documentRef: documentRef || 'STOCK-CARD-IMPORT',
                 remarks: row.remarks || `จ่ายออกล็อต ${lotNum}`,
-                createdBy: creator || 'ระบบนำเข้า OCR',
+                createdBy: finalCreator,
               },
             });
             importedTx++;

@@ -140,3 +140,22 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 }
 
+enum UserRole {
+  ADMIN
+  STORE
+  PROD
+  VIEWER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(STORE)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
