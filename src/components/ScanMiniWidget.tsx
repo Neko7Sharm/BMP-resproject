@@ -17,7 +17,7 @@ export default function ScanMiniWidget() {
   if (!isAnalyzing && !scanResult) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-sm w-[90vw] sm:w-84 bg-white/95 backdrop-blur-md border border-indigo-200 rounded-2xl shadow-2xl p-3.5 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+    <div className="fixed bottom-20 md:bottom-5 right-4 sm:right-5 z-50 max-w-sm w-[92vw] sm:w-84 bg-white/95 backdrop-blur-md border border-indigo-200 rounded-2xl shadow-2xl p-3.5 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">

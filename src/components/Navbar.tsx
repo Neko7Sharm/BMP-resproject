@@ -262,8 +262,8 @@ export default function Navbar() {
       )}
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg z-50 no-print">
-        <div className="flex items-stretch h-16">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_25px_rgba(0,0,0,0.07)] z-50 no-print">
+        <div className="flex items-stretch h-16 max-w-md mx-auto px-1">
           {mobileNav.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -271,18 +271,31 @@ export default function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-all relative ${
                   item.highlight
                     ? active
-                      ? 'text-purple-700 bg-purple-50'
+                      ? 'text-purple-700 font-bold'
                       : 'text-purple-600'
                     : active
-                    ? 'text-blue-700 bg-blue-50'
-                    : 'text-slate-500'
+                    ? 'text-blue-600 font-bold'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${active ? 'scale-110' : ''} transition-transform`} />
-                <span>{item.label}</span>
+                {active && (
+                  <span className={`absolute top-1 w-6 h-1 rounded-full ${
+                    item.highlight ? 'bg-purple-600' : 'bg-blue-600'
+                  }`} />
+                )}
+                <div className={`p-1 rounded-xl transition-transform ${
+                  active
+                    ? item.highlight
+                      ? 'bg-purple-100/80 scale-105'
+                      : 'bg-blue-100/80 scale-105'
+                    : ''
+                }`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <span className="leading-none">{item.label}</span>
               </Link>
             );
           })}

@@ -19,7 +19,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <Navbar />
         <main
-          className={`flex-1 w-full mx-auto ${
+          className={`flex-1 w-full mx-auto pb-24 md:pb-8 ${
             isDbStudio
               ? 'max-w-[1600px] p-4 sm:p-6 lg:p-8'
               : 'max-w-7xl p-4 sm:p-6 lg:p-8'

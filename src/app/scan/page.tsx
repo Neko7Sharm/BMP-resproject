@@ -6,7 +6,8 @@ import {
   ScanLine, Upload, Loader2, CheckCircle2, AlertCircle, Edit2,
   Save, RefreshCw, ZoomIn, ZoomOut, RotateCcw, Database,
   ChevronDown, Plus, Trash2, X, Image, Info, Eye, Check,
-  ArrowRight, Package, History, Sparkles, Zap
+  ArrowRight, Package, History, Sparkles, Zap, Camera, Video,
+  Grid, List, Maximize2, Minimize2, Smartphone, Focus
 } from 'lucide-react';
 import { useScan, StockRow, ScanResult } from '@/context/ScanContext';
 import { optimizeImageForOCR } from '@/lib/imageOptimizer';
@@ -64,6 +65,20 @@ export default function ScanPage() {
   const [isSavingKey, setIsSavingKey] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Live Camera (Webcam) State
+  const [isWebcamOpen, setIsWebcamOpen] = useState(false);
+  const [webcamFacingMode, setWebcamFacingMode] = useState<'environment' | 'user'>('environment');
+  const [webcamError, setWebcamError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+
+  // Verification & Inspector State
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [inspectorZoom, setInspectorZoom] = useState(120);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
 
   // Load sections & materials on mount; check API status
   useEffect(() => {
@@ -151,6 +166,83 @@ export default function ScanPage() {
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
   };
+
+  // Stop webcam stream cleanly
+  const stopWebcam = useCallback(() => {
+    if (webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach(track => track.stop());
+      webcamStreamRef.current = null;
+    }
+    setIsWebcamOpen(false);
+    setWebcamError(null);
+  }, []);
+
+  // Clean up webcam on unmount
+  useEffect(() => {
+    return () => {
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Start live webcam stream
+  const startWebcam = useCallback(async (facing: 'environment' | 'user' = 'environment') => {
+    setWebcamError(null);
+    setIsWebcamOpen(true);
+    try {
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: facing,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      webcamStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch (err: any) {
+      console.error('Camera error:', err);
+      setWebcamError(
+        err.name === 'NotAllowedError'
+          ? 'กรุณากด "อนุญาต (Allow)" ให้เบราว์เซอร์เข้าถึงกล้องถ่ายภาพ'
+          : 'ไม่สามารถเปิดกล้องได้: ' + (err.message || 'อุปกรณ์ไม่รองรับหรือกล้องถูกใช้งานอยู่')
+      );
+    }
+  }, []);
+
+  // Snap photo from live video canvas
+  const captureWebcam = useCallback(() => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `camera_scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        stopWebcam();
+        processFile(file);
+      }
+    }, 'image/jpeg', 0.95);
+  }, [processFile, stopWebcam]);
+
+  // Switch between rear & front camera
+  const toggleFacingMode = useCallback(() => {
+    const next = webcamFacingMode === 'environment' ? 'user' : 'environment';
+    setWebcamFacingMode(next);
+    startWebcam(next);
+  }, [webcamFacingMode, startWebcam]);
 
   const refreshKeyStatus = () => {
     fetch('/api/ai/ocr-stock-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'CHECK_KEY' }) })
@@ -561,29 +653,86 @@ export default function ScanPage() {
         {/* ---- LEFT: Image upload + preview ---- */}
         <div className="space-y-4">
           {!imageURL ? (
-            /* Drop zone */
-            <div
-              onDragEnter={() => setIsDragging(true)}
-              onDragLeave={() => setIsDragging(false)}
-              onDragOver={e => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition ${
-                isDragging ? 'border-purple-400 bg-purple-50' : 'border-slate-300 hover:border-purple-400 hover:bg-slate-50'
-              }`}
-            >
-              <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center">
-                <Image className="w-8 h-8 text-purple-500" />
+            /* Upload & Camera Capture Hub */
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
+              <div className="text-center space-y-1">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+                  <Camera className="w-3.5 h-3.5" />
+                  นำเข้าภาพ Stock Card
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-slate-800">
+                  ถ่ายรูปด้วยกล้อง หรือเลือกไฟล์รูปภาพ
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  ระบบรองรับทั้งการถ่ายรูปผ่านกล้องโทรศัพท์ ถ่ายสดผ่านเว็บ หรืออัปโหลดจากคลังภาพ
+                </p>
               </div>
-              <div className="text-center">
-                <p className="text-base font-semibold text-slate-700">ลากรูปมาวางที่นี่</p>
-                <p className="text-sm text-slate-400 mt-1">หรือคลิกเพื่อเลือกไฟล์รูปภาพ Stock Card</p>
-                <p className="text-xs text-slate-400 mt-1">รองรับ JPG, PNG, WEBP ขนาดไม่เกิน 12MB</p>
+
+              {/* 3 Quick Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Native Mobile Camera */}
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="group p-4 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white shadow-md shadow-purple-200 flex flex-col items-center justify-center text-center gap-2 transition active:scale-98"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold block leading-tight">ถ่ายด้วยกล้อง</span>
+                    <span className="text-[11px] text-purple-100 block mt-0.5">กล้องหลังสมาร์ตโฟน HD</span>
+                  </div>
+                </button>
+
+                {/* 2. Web Live Camera Viewfinder */}
+                <button
+                  type="button"
+                  onClick={() => startWebcam('environment')}
+                  className="group p-4 rounded-2xl bg-white border-2 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-800 shadow-xs flex flex-col items-center justify-center text-center gap-2 transition active:scale-98"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition">
+                    <Focus className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold block leading-tight text-indigo-900">เปิดกล้องสดในเว็บ</span>
+                    <span className="text-[11px] text-slate-500 block mt-0.5">มีกรอบช่วยเล็งเอกสาร</span>
+                  </div>
+                </button>
+
+                {/* 3. Choose from Device Gallery */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 flex flex-col items-center justify-center text-center gap-2 transition active:scale-98"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center group-hover:scale-110 transition">
+                    <Image className="w-6 h-6 text-slate-700" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold block leading-tight">เลือกรูปจากเครื่อง</span>
+                    <span className="text-[11px] text-slate-500 block mt-0.5">คลังภาพ / อัลบั้ม / ไฟล์</span>
+                  </div>
+                </button>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition">
-                <Upload className="w-4 h-4" />
-                <span>เลือกไฟล์รูป</span>
+
+              {/* Desktop Drag and Drop Dropzone */}
+              <div
+                onDragEnter={() => setIsDragging(true)}
+                onDragLeave={() => setIsDragging(false)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`hidden sm:flex border-2 border-dashed rounded-2xl p-6 flex-col items-center justify-center gap-2 cursor-pointer transition ${
+                  isDragging ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:border-purple-300 hover:bg-slate-50/70'
+                }`}
+              >
+                <Upload className="w-5 h-5 text-slate-400" />
+                <p className="text-xs font-semibold text-slate-600">หรือลากไฟล์ภาพมาวางที่นี่ (รองรับ JPG, PNG, WEBP ไม่เกิน 20MB)</p>
               </div>
+
+              {/* Hidden Inputs */}
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
             </div>
           ) : (
@@ -833,132 +982,312 @@ export default function ScanPage() {
               </div>
             </div>
 
-            {/* Staging table */}
+            {/* Staging table & cards */}
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-800">
-                  รายการเคลื่อนไหว ({scanResult.rows.length} แถว)
-                </h3>
-                <button onClick={addRow} className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 px-2 py-1 rounded hover:bg-purple-50 transition">
-                  <Plus className="w-3.5 h-3.5" />เพิ่มแถว
-                </button>
+              <div className="px-4 sm:px-5 py-3 border-b border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-800">
+                    รายการเคลื่อนไหว ({scanResult.rows.length} แถว)
+                  </h3>
+                  {/* View Mode Toggle: Cards vs Table */}
+                  <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('cards')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition ${
+                        viewMode === 'cards' ? 'bg-white text-purple-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="มุมมองการ์ด (เหมาะกับมือถือ)"
+                    >
+                      <Grid className="w-3 h-3" />
+                      <span className="hidden sm:inline">การ์ด</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('table')}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition ${
+                        viewMode === 'table' ? 'bg-white text-purple-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="มุมมองตารางเต็ม"
+                    >
+                      <List className="w-3 h-3" />
+                      <span className="hidden sm:inline">ตาราง</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {imageURL && (
+                    <button
+                      type="button"
+                      onClick={() => setIsInspectorOpen(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
+                    >
+                      <Focus className="w-3.5 h-3.5" />
+                      <span>ส่องภาพเทียบ</span>
+                    </button>
+                  )}
+                  <button onClick={addRow} className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 px-2 py-1 rounded-lg hover:bg-purple-50 transition">
+                    <Plus className="w-3.5 h-3.5" />เพิ่มแถว
+                  </button>
+                </div>
               </div>
-              <div className="overflow-x-auto max-h-[55vh] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
-                    <tr>
-                      {['#', 'วันที่', 'Lot No.', 'รับเข้า', 'จ่ายออก', 'คงเหลือ/Lot', 'รวมทั้งหมด', 'EXP Date', 'หมายเหตุ', ''].map(h => (
-                        <th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {scanResult.rows.map((row, idx) => (
-                      <tr key={row.id} className="hover:bg-purple-50/40 transition">
-                        {/* Row Number */}
-                        <td className="px-2 py-1.5 text-center text-slate-400 font-mono text-[11px] w-8">
-                          {idx + 1}
-                        </td>
-                        {/* Date */}
-                        <td className="px-1.5 py-1">
+
+              {/* View 1: Mobile Cards View */}
+              {viewMode === 'cards' ? (
+                <div className="p-3 sm:p-4 space-y-3 max-h-[60vh] overflow-y-auto bg-slate-50/60">
+                  {scanResult.rows.map((row, idx) => (
+                    <div
+                      key={row.id}
+                      className={`bg-white border rounded-2xl p-3.5 shadow-2xs transition ${
+                        highlightedRowId === row.id ? 'border-purple-400 ring-2 ring-purple-100' : 'border-slate-200'
+                      }`}
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 font-bold font-mono text-xs flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs font-bold text-slate-700">Lot:</span>
+                          <input
+                            type="text"
+                            value={row.lotNumber}
+                            placeholder="Lot No."
+                            onChange={e => updateRow(row.id, 'lotNumber', e.target.value)}
+                            className="px-2 py-1 bg-purple-50/50 border border-purple-200 rounded-lg text-xs font-mono font-bold text-purple-900 w-32 focus:ring-1 focus:ring-purple-500 outline-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {imageURL && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHighlightedRowId(row.id);
+                                setIsInspectorOpen(true);
+                              }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs transition"
+                              title="ส่องภาพเทียบแถวนี้"
+                            >
+                              <Focus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteRow(row.id)}
+                            className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title="ลบแถวนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Date & EXP Date */}
+                      <div className="grid grid-cols-2 gap-2 mb-2.5">
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">วันที่ผลิต / นำเข้า</label>
                           <input
                             type="text"
                             value={row.date}
                             placeholder="วว/ดด/ค.ศ."
                             onChange={e => updateRow(row.id, 'date', e.target.value)}
                             onBlur={e => updateRow(row.id, 'date', normalizeDateToCE(e.target.value))}
-                            className="w-24 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs font-mono outline-none transition"
-                            title="วันที่ (ระบุเป็นปี ค.ศ. เช่น 07/08/2026)"
+                            className="w-full px-2.5 py-1.5 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-purple-500 outline-none"
                           />
-                        </td>
-                        {/* Lot */}
-                        <td className="px-1.5 py-1">
-                          <input
-                            type="text"
-                            value={row.lotNumber}
-                            placeholder="เช่น 100726"
-                            onChange={e => updateRow(row.id, 'lotNumber', e.target.value)}
-                            className="w-24 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs font-bold font-mono text-purple-900 outline-none transition"
-                          />
-                        </td>
-                        {/* Inbound */}
-                        <td className="px-1.5 py-1">
-                          <input
-                            type="number"
-                            value={row.inboundQty === 0 ? '' : row.inboundQty}
-                            placeholder="0"
-                            onChange={e => updateRow(row.id, 'inboundQty', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-emerald-500 rounded text-xs font-semibold text-emerald-700 text-right outline-none transition"
-                          />
-                        </td>
-                        {/* Outbound */}
-                        <td className="px-1.5 py-1">
-                          <input
-                            type="number"
-                            value={row.outboundQty === 0 ? '' : row.outboundQty}
-                            placeholder="0"
-                            onChange={e => updateRow(row.id, 'outboundQty', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-rose-500 rounded text-xs font-semibold text-rose-600 text-right outline-none transition"
-                          />
-                        </td>
-                        {/* Balance */}
-                        <td className="px-1.5 py-1">
-                          <input
-                            type="number"
-                            value={row.balanceQty === 0 ? '' : row.balanceQty}
-                            placeholder="0"
-                            onChange={e => updateRow(row.id, 'balanceQty', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-800 text-right outline-none transition"
-                          />
-                        </td>
-                        {/* Total */}
-                        <td className="px-1.5 py-1">
-                          <input
-                            type="number"
-                            value={row.totalQty === 0 ? '' : row.totalQty}
-                            placeholder="0"
-                            onChange={e => updateRow(row.id, 'totalQty', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-500 text-right outline-none transition"
-                          />
-                        </td>
-                        {/* EXP Date */}
-                        <td className="px-1.5 py-1">
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-amber-700 block mb-0.5">วันหมดอายุ (EXP)</label>
                           <input
                             type="text"
                             value={row.expDate}
                             placeholder="DD-MM-YYYY"
                             onChange={e => updateRow(row.id, 'expDate', e.target.value)}
                             onBlur={e => updateRow(row.id, 'expDate', normalizeExpDateToCE(e.target.value))}
-                            className="w-28 px-2 py-1 bg-amber-50/60 hover:bg-white focus:bg-white border border-transparent hover:border-amber-300 focus:border-amber-500 rounded text-xs font-mono text-amber-900 outline-none transition"
-                            title="วันหมดอายุ (ปี ค.ศ. เช่น 19-08-2027)"
+                            className="w-full px-2.5 py-1.5 text-xs font-mono bg-amber-50/50 border border-amber-200 text-amber-900 rounded-lg focus:bg-white focus:border-amber-500 outline-none"
                           />
-                        </td>
-                        {/* Remarks */}
-                        <td className="px-1.5 py-1">
+                        </div>
+                      </div>
+
+                      {/* Quantities: Inbound / Outbound / Balance */}
+                      <div className="grid grid-cols-3 gap-2 p-2 bg-slate-50 rounded-xl mb-2.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-emerald-700 block mb-0.5">รับเข้า (+)</span>
+                          <input
+                            type="number"
+                            value={row.inboundQty === 0 ? '' : row.inboundQty}
+                            placeholder="0"
+                            onChange={e => updateRow(row.id, 'inboundQty', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-white border border-emerald-200 text-emerald-700 font-bold text-xs text-right rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-rose-600 block mb-0.5">จ่ายออก (-)</span>
+                          <input
+                            type="number"
+                            value={row.outboundQty === 0 ? '' : row.outboundQty}
+                            placeholder="0"
+                            onChange={e => updateRow(row.id, 'outboundQty', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-white border border-rose-200 text-rose-600 font-bold text-xs text-right rounded-lg focus:ring-1 focus:ring-rose-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-purple-800 block mb-0.5">คงเหลือ/Lot</span>
+                          <input
+                            type="number"
+                            value={row.balanceQty === 0 ? '' : row.balanceQty}
+                            placeholder="0"
+                            onChange={e => updateRow(row.id, 'balanceQty', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-white border border-purple-200 text-slate-800 font-bold text-xs text-right rounded-lg focus:ring-1 focus:ring-purple-500 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Total & Remarks */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 shrink-0">รวมสะสม:</span>
+                          <input
+                            type="number"
+                            value={row.totalQty === 0 ? '' : row.totalQty}
+                            placeholder="0"
+                            onChange={e => updateRow(row.id, 'totalQty', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 text-slate-600 text-xs text-right rounded-lg outline-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 shrink-0">หมายเหตุ:</span>
                           <input
                             type="text"
                             value={row.remarks}
-                            placeholder="หมายเหตุ"
+                            placeholder="บันทึกเพิ่มเติม"
                             onChange={e => updateRow(row.id, 'remarks', e.target.value)}
-                            className="w-32 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-600 outline-none transition"
+                            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg outline-none"
                           />
-                        </td>
-                        {/* Actions */}
-                        <td className="px-2 py-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => deleteRow(row.id)}
-                            className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition"
-                            title="ลบแถวนี้"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* View 2: Horizontal Full Table */
+                <div className="overflow-x-auto max-h-[55vh] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
+                      <tr>
+                        {['#', 'วันที่', 'Lot No.', 'รับเข้า', 'จ่ายออก', 'คงเหลือ/Lot', 'รวมทั้งหมด', 'EXP Date', 'หมายเหตุ', ''].map(h => (
+                          <th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {scanResult.rows.map((row, idx) => (
+                        <tr key={row.id} className="hover:bg-purple-50/40 transition">
+                          {/* Row Number */}
+                          <td className="px-2 py-1.5 text-center text-slate-400 font-mono text-[11px] w-8">
+                            {idx + 1}
+                          </td>
+                          {/* Date */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="text"
+                              value={row.date}
+                              placeholder="วว/ดด/ค.ศ."
+                              onChange={e => updateRow(row.id, 'date', e.target.value)}
+                              onBlur={e => updateRow(row.id, 'date', normalizeDateToCE(e.target.value))}
+                              className="w-24 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs font-mono outline-none transition"
+                              title="วันที่ (ระบุเป็นปี ค.ศ. เช่น 07/08/2026)"
+                            />
+                          </td>
+                          {/* Lot */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="text"
+                              value={row.lotNumber}
+                              placeholder="เช่น 100726"
+                              onChange={e => updateRow(row.id, 'lotNumber', e.target.value)}
+                              className="w-24 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs font-bold font-mono text-purple-900 outline-none transition"
+                            />
+                          </td>
+                          {/* Inbound */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="number"
+                              value={row.inboundQty === 0 ? '' : row.inboundQty}
+                              placeholder="0"
+                              onChange={e => updateRow(row.id, 'inboundQty', parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-emerald-500 rounded text-xs font-semibold text-emerald-700 text-right outline-none transition"
+                            />
+                          </td>
+                          {/* Outbound */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="number"
+                              value={row.outboundQty === 0 ? '' : row.outboundQty}
+                              placeholder="0"
+                              onChange={e => updateRow(row.id, 'outboundQty', parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-rose-500 rounded text-xs font-semibold text-rose-600 text-right outline-none transition"
+                            />
+                          </td>
+                          {/* Balance */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="number"
+                              value={row.balanceQty === 0 ? '' : row.balanceQty}
+                              placeholder="0"
+                              onChange={e => updateRow(row.id, 'balanceQty', parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-800 text-right outline-none transition"
+                            />
+                          </td>
+                          {/* Total */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="number"
+                              value={row.totalQty === 0 ? '' : row.totalQty}
+                              placeholder="0"
+                              onChange={e => updateRow(row.id, 'totalQty', parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-500 text-right outline-none transition"
+                            />
+                          </td>
+                          {/* EXP Date */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="text"
+                              value={row.expDate}
+                              placeholder="DD-MM-YYYY"
+                              onChange={e => updateRow(row.id, 'expDate', e.target.value)}
+                              onBlur={e => updateRow(row.id, 'expDate', normalizeExpDateToCE(e.target.value))}
+                              className="w-28 px-2 py-1 bg-amber-50/60 hover:bg-white focus:bg-white border border-transparent hover:border-amber-300 focus:border-amber-500 rounded text-xs font-mono text-amber-900 outline-none transition"
+                              title="วันหมดอายุ (ปี ค.ศ. เช่น 19-08-2027)"
+                            />
+                          </td>
+                          {/* Remarks */}
+                          <td className="px-1.5 py-1">
+                            <input
+                              type="text"
+                              value={row.remarks}
+                              placeholder="หมายเหตุ"
+                              onChange={e => updateRow(row.id, 'remarks', e.target.value)}
+                              className="w-32 px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-transparent hover:border-slate-200 focus:border-purple-500 rounded text-xs text-slate-600 outline-none transition"
+                            />
+                          </td>
+                          {/* Actions */}
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => deleteRow(row.id)}
+                              className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                              title="ลบแถวนี้"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Commit button */}
@@ -977,6 +1306,200 @@ export default function ScanPage() {
           </div>
         )}
       </div>
+
+      {/* ── Floating Image Inspector Button (เปิดเมื่อมีรูปและกำลังดูผล) ── */}
+      {imageURL && scanResult && (
+        <aside aria-label="เครื่องมือตรวจทานภาพ" className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40">
+          <button
+            type="button"
+            onClick={() => setIsInspectorOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-full shadow-lg shadow-purple-500/30 transition transform hover:scale-105 active:scale-95 border border-white/20"
+          >
+            <Focus className="w-4 h-4 text-white animate-pulse" />
+            <span className="text-xs font-bold">ส่องภาพเทียบ</span>
+            <span className="text-[10px] px-1.5 py-0.5 bg-white/20 rounded-full font-mono font-bold">
+              {scanResult.rows.length} แถว
+            </span>
+          </button>
+        </aside>
+      )}
+
+      {/* ── Modal: ตรวจทานภาพต้นฉบับเทียบกับข้อมูล (Inspector with Zoom/Pan) ── */}
+      {isInspectorOpen && imageURL && (
+        <div className="fixed inset-0 bg-slate-900/75 z-50 flex items-center justify-center p-3 sm:p-6 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-4xl w-full h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Inspector Header */}
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <Focus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-800">
+                    ตรวจทานภาพต้นฉบับ (Image Inspector)
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    ซูมส่องตัวเลขและลายมือเพื่อเทียบกับข้อมูลในตาราง
+                  </p>
+                </div>
+              </div>
+
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setInspectorZoom(z => Math.max(60, z - 25))}
+                  className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
+                  title="ซูมออก"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-mono font-bold text-slate-700 min-w-10 text-center">
+                  {inspectorZoom}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setInspectorZoom(z => Math.min(300, z + 25))}
+                  className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
+                  title="ซูมเข้า"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorZoom(100)}
+                  className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
+                  title="รีเซ็ต 100%"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <div className="w-px h-5 bg-slate-200 mx-1" />
+                <button
+                  type="button"
+                  onClick={() => setIsInspectorOpen(false)}
+                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition"
+                  title="ปิดหน้าต่าง"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Inspector Body: Scrollable & Zoomable Image View */}
+            <div className="flex-1 overflow-auto bg-slate-900/95 p-4 flex items-center justify-center cursor-grab active:cursor-grabbing select-none">
+              <img
+                src={imageURL}
+                alt="Original Stock Card"
+                style={{ width: `${inspectorZoom}%`, maxWidth: 'none' }}
+                className="rounded-lg shadow-2xl transition-[width] duration-150"
+                draggable={false}
+              />
+            </div>
+
+            {/* Inspector Footer: Quick tips */}
+            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+              <span>💡 เลื่อนนิ้วหรือเลื่อนเมาส์เพื่อตรวจเช็คตัวเลขแต่ละแถว</span>
+              <button
+                type="button"
+                onClick={() => setIsInspectorOpen(false)}
+                className="px-3.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: ถ่ายภาพผ่านกล้องสดในเว็บพร้อมกรอบช่วยเล็ง ── */}
+      {isWebcamOpen && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-between p-4 sm:p-6 backdrop-blur-sm">
+          {/* Top Bar */}
+          <div className="w-full max-w-2xl flex items-center justify-between text-white z-10">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-bold">กล้องถ่าย Stock Card</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleFacingMode}
+                className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition active:scale-95"
+                title="สลับกล้องหน้า/หลัง"
+              >
+                <RotateCcw className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={stopWebcam}
+                className="p-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-md transition active:scale-95"
+                title="ปิดกล้อง"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Video Container with Target Guide Frame */}
+          <div className="relative w-full max-w-2xl flex-1 my-3 flex items-center justify-center overflow-hidden rounded-3xl bg-black border border-white/10 shadow-2xl">
+            {webcamError ? (
+              <div className="p-6 text-center text-rose-300 max-w-md">
+                <AlertCircle className="w-10 h-10 mx-auto mb-2 text-rose-400" />
+                <p className="font-bold text-sm mb-1">ไม่สามารถเปิดกล้องได้</p>
+                <p className="text-xs text-rose-200/80 mb-4">{webcamError}</p>
+                <button
+                  type="button"
+                  onClick={() => startWebcam(webcamFacingMode)}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold text-white transition"
+                >
+                  ลองใหม่อีกครั้ง
+                </button>
+              </div>
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover rounded-3xl"
+                />
+
+                {/* Guide Frame Overlay */}
+                <div className="absolute inset-4 sm:inset-8 border-2 border-dashed border-emerald-400/80 rounded-2xl pointer-events-none flex flex-col justify-between p-3 shadow-inner">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[10px] font-bold text-emerald-300 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-xs">
+                      กรอบใบสต็อกการ์ด
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-300/80 bg-black/60 px-1.5 py-0.5 rounded-md">
+                      HD
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    <span className="inline-block text-xs font-medium text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-xs">
+                      วางใบการ์ดให้ขนานและเต็มกรอบ แสงสว่างชัดเจน
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Bottom Bar: Shutter Button */}
+          <div className="w-full max-w-2xl flex items-center justify-center py-2 z-10">
+            <button
+              type="button"
+              onClick={captureWebcam}
+              className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white bg-white/30 hover:bg-white/50 active:scale-95 flex items-center justify-center p-1.5 transition shadow-lg"
+              title="กดเพื่อถ่ายภาพ"
+            >
+              <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-purple-600 shadow-sm">
+                <Camera className="w-7 h-7" />
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal: ใส่ Gemini API Key (ใช้ร่วมกันทุกคน เก็บใน DB) ── */}
       {showKeyModal && (
